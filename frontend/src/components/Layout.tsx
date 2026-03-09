@@ -5,6 +5,7 @@ import { decodeToken, UserInfo } from '../api/auth';
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const userInfo = decodeToken();
@@ -22,31 +23,48 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="sidebar-title">
-          DaCosta All Motors
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>
-            Inventory & Sales Console
-          </div>
-          {user && (
-            <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.5rem', fontWeight: 'normal' }}>
-              Role: {user.role}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div className="sidebar-title">
+            DaCosta All Motors
+            <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>
+              Inventory & Sales Console
             </div>
-          )}
+            {user && (
+              <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.5rem', fontWeight: 'normal' }}>
+                Role: {user.role}
+              </div>
+            )}
+          </div>
+          <button
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            style={{
+              display: 'none',
+              background: 'none',
+              border: 'none',
+              color: '#e5e7eb',
+              fontSize: '1.5rem',
+              cursor: 'pointer',
+              padding: '0.5rem',
+            }}
+          >
+            ☰
+          </button>
         </div>
-        <nav className="sidebar-nav">
-          <NavLink to="/" end>
+        <nav className={`sidebar-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+          <NavLink to="/" end onClick={() => setMobileMenuOpen(false)}>
             Dashboard
           </NavLink>
           {(isAdmin || isStaff) && (
             <>
-              <NavLink to="/products">Products</NavLink>
-              <NavLink to="/invoices">Invoices</NavLink>
-              <NavLink to="/reports">Reports</NavLink>
+              <NavLink to="/products" onClick={() => setMobileMenuOpen(false)}>Products</NavLink>
+              <NavLink to="/invoices" onClick={() => setMobileMenuOpen(false)}>Invoices</NavLink>
+              <NavLink to="/reports" onClick={() => setMobileMenuOpen(false)}>Reports</NavLink>
             </>
           )}
           {isAdmin && (
             <>
-              <NavLink to="/users">Users</NavLink>
+              <NavLink to="/users" onClick={() => setMobileMenuOpen(false)}>Users</NavLink>
             </>
           )}
         </nav>

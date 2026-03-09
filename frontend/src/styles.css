@@ -41,6 +41,11 @@ a {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: relative;
+  }
+  
+  .mobile-menu-toggle {
+    display: block !important;
   }
   
   .sidebar-nav {
@@ -51,12 +56,14 @@ a {
     display: flex;
     flex-direction: column;
     position: absolute;
-    top: 60px;
+    top: 70px;
     left: 0;
     right: 0;
     background: linear-gradient(180deg, #0f172a, #020617);
     padding: 1rem;
     gap: 0.5rem;
+    z-index: 1000;
+    width: 100%;
   }
 }
 
@@ -64,6 +71,13 @@ a {
   font-weight: 700;
   margin-bottom: 1.5rem;
   font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .sidebar-title {
+    margin-bottom: 0;
+    font-size: 0.95rem;
+  }
 }
 
 .sidebar-nav a {
@@ -147,10 +161,19 @@ a {
   gap: 0.4rem;
 }
 
+@media (max-width: 768px) {
+  .btn {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.95rem;
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 480px) {
   .btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    min-height: 44px;
   }
 }
 
@@ -213,6 +236,14 @@ a {
   font-size: 0.9rem;
 }
 
+@media (max-width: 768px) {
+  .input,
+  .select {
+    padding: 0.7rem 0.9rem;
+    font-size: 1rem;
+  }
+}
+
 .input:focus,
 .select:focus {
   outline: 2px solid #0f172a;
@@ -229,8 +260,12 @@ a {
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 1rem;
+  }
+  
+  .page-header h1 {
+    margin-bottom: 0;
   }
   
   .page-header .btn {

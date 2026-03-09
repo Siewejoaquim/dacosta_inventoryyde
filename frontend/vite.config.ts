@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'https://dacosta-inventory.onrender.com',
         changeOrigin: true,
       },
     },
