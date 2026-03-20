@@ -6,38 +6,75 @@ import api from '../api/client';
 
 const StaffExpenseSummary: React.FC = () => {
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [todaySales, setTodaySales] = useState(0);
+
   useEffect(() => {
     api.get('/expenses/today').then((r) => setExpenses(r.data)).catch(() => {});
+    api.get('/invoices').then((r) => {
+      const today = new Date();
+      const sales = (r.data as any[])
+        .filter((inv) => {
+          const d = new Date(inv.dateCreated);
+          return d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate() &&
+            inv.status !== 'VOID';
+        })
+        .reduce((s: number, inv: any) => s + inv.totalAmount, 0);
+      setTodaySales(sales);
+    }).catch(() => {});
   }, []);
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const net = todaySales - totalExpenses;
+
   return (
-    <div className="card" style={{ maxWidth: '600px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <div className="card-title" style={{ margin: 0 }}>Today's Expenses</div>
-        <div style={{ fontWeight: 700 }}>Fr {total.toLocaleString()}</div>
-      </div>
-      {expenses.length === 0 ? (
-        <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>No expenses logged today. <Link to="/expenses" style={{ color: '#2563eb' }}>Log one</Link></div>
-      ) : (
-        <table className="table">
-          <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
-          <tbody>
-            {expenses.slice(0, 5).map((e: any) => (
-              <tr key={e._id}>
-                <td><span className="pill muted">{e.category}</span></td>
-                <td>{e.description}</td>
-                <td>Fr {e.amount.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {expenses.length > 5 && (
-        <div style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>
-          <Link to="/expenses" style={{ color: '#2563eb' }}>View all {expenses.length} expenses</Link>
+    <>
+      {/* Net today card */}
+      <div className="card-grid" style={{ maxWidth: '600px', marginBottom: '1rem' }}>
+        <div className="card">
+          <div className="card-title">Sales Today</div>
+          <div className="card-value" style={{ fontSize: '1.1rem' }}>Fr {todaySales.toLocaleString()}</div>
         </div>
-      )}
-    </div>
+        <div className="card">
+          <div className="card-title">Expenses Today</div>
+          <div className="card-value" style={{ fontSize: '1.1rem', color: '#b91c1c' }}>Fr {totalExpenses.toLocaleString()}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">Net Today</div>
+          <div className="card-value" style={{ fontSize: '1.1rem', color: net >= 0 ? '#166534' : '#b91c1c' }}>Fr {net.toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Expense list */}
+      <div className="card" style={{ maxWidth: '600px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <div className="card-title" style={{ margin: 0 }}>Today's Expenses</div>
+          <div style={{ fontWeight: 700 }}>Fr {totalExpenses.toLocaleString()}</div>
+        </div>
+        {expenses.length === 0 ? (
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>No expenses logged today. <Link to="/expenses" style={{ color: '#2563eb' }}>Log one</Link></div>
+        ) : (
+          <table className="table">
+            <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+            <tbody>
+              {expenses.slice(0, 5).map((e: any) => (
+                <tr key={e._id}>
+                  <td><span className="pill muted">{e.category}</span></td>
+                  <td>{e.description}</td>
+                  <td>Fr {e.amount.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {expenses.length > 5 && (
+          <div style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>
+            <Link to="/expenses" style={{ color: '#2563eb' }}>View all {expenses.length} expenses</Link>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
@@ -136,6 +173,15 @@ export const DashboardPage: React.FC = () => {
           <div className="card-value">
             Fr {data?.totalSalesToday.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
+          <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>
+            Expenses: Fr {(data?.expensesToday ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-title">Net Today</div>
+          <div className="card-value" style={{ color: (data?.netToday ?? 0) >= 0 ? '#166534' : '#b91c1c' }}>
+            Fr {(data?.netToday ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
         </div>
         <div className="card">
           <div className="card-title">Weekly Sales</div>
@@ -147,6 +193,15 @@ export const DashboardPage: React.FC = () => {
           <div className="card-title">Monthly Revenue</div>
           <div className="card-value">
             Fr {data?.monthlyRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>
+            Expenses: Fr {(data?.expensesMonthly ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-title">Net This Month</div>
+          <div className="card-value" style={{ color: (data?.netMonthly ?? 0) >= 0 ? '#166534' : '#b91c1c' }}>
+            Fr {(data?.netMonthly ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
       </div>

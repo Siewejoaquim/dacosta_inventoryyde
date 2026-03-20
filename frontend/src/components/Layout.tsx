@@ -67,6 +67,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           {isAdmin && (
             <>
               <NavLink to="/stock-history" onClick={() => setMobileMenuOpen(false)}>Stock History</NavLink>
+              <NavLink to="/expense-tracking" onClick={() => setMobileMenuOpen(false)}>Expense Tracking</NavLink>
               <NavLink to="/users" onClick={() => setMobileMenuOpen(false)}>Users</NavLink>
             </>
           )}

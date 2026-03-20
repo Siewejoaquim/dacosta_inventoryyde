@@ -23,6 +23,20 @@ export class ExpensesController {
     return this.expensesService.findToday();
   }
 
+  @Get('summary')
+  @Roles(UserRole.ADMIN)
+  summary(
+    @Query('period') period: 'monthly' | '6months' | 'yearly' | 'custom' = 'monthly',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.expensesService.summaryByPeriod(
+      period,
+      from ? new Date(from) : undefined,
+      to ? new Date(to) : undefined,
+    );
+  }
+
   @Get()
   @Roles(UserRole.ADMIN)
   findAll(@Query('from') from: string, @Query('to') to: string) {
