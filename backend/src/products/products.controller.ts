@@ -18,6 +18,12 @@ export class ProductsController {
     return this.productsService.getCategories();
   }
 
+  @Get('dead-stock')
+  @Roles(UserRole.ADMIN)
+  deadStock(@Query('days') days?: string) {
+    return this.productsService.findDeadStock(days ? Number(days) : 30);
+  }
+
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   findAll(

@@ -2,6 +2,77 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { decodeToken, UserInfo } from '../api/auth';
 import { useDashboardSummary } from '../api/hooks';
+import api from '../api/client';
+
+const StaffExpenseSummary: React.FC = () => {
+  const [expenses, setExpenses] = useState<any[]>([]);
+  useEffect(() => {
+    api.get('/expenses/today').then((r) => setExpenses(r.data)).catch(() => {});
+  }, []);
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  return (
+    <div className="card" style={{ maxWidth: '600px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <div className="card-title" style={{ margin: 0 }}>Today's Expenses</div>
+        <div style={{ fontWeight: 700 }}>Fr {total.toLocaleString()}</div>
+      </div>
+      {expenses.length === 0 ? (
+        <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>No expenses logged today. <Link to="/expenses" style={{ color: '#2563eb' }}>Log one</Link></div>
+      ) : (
+        <table className="table">
+          <thead><tr><th>Category</th><th>Description</th><th>Amount</th></tr></thead>
+          <tbody>
+            {expenses.slice(0, 5).map((e: any) => (
+              <tr key={e._id}>
+                <td><span className="pill muted">{e.category}</span></td>
+                <td>{e.description}</td>
+                <td>Fr {e.amount.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {expenses.length > 5 && (
+        <div style={{ marginTop: '0.5rem', fontSize: '0.82rem' }}>
+          <Link to="/expenses" style={{ color: '#2563eb' }}>View all {expenses.length} expenses</Link>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminDeadStock: React.FC = () => {
+  const [deadStock, setDeadStock] = useState<any[]>([]);
+  useEffect(() => {
+    api.get('/products/dead-stock').then((r) => setDeadStock(r.data)).catch(() => {});
+  }, []);
+  if (deadStock.length === 0) return null;
+  return (
+    <div className="card" style={{ marginTop: '1.2rem' }}>
+      <div className="card-title">
+        Dead Stock <span className="badge">{deadStock.length} items</span>
+      </div>
+      <div style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: '0.5rem' }}>
+        Products with stock that haven't moved in 30+ days
+      </div>
+      <table className="table">
+        <thead><tr><th>Product</th><th>Category</th><th>In Stock</th><th>Last Updated</th></tr></thead>
+        <tbody>
+          {deadStock.map((p: any) => (
+            <tr key={p._id}>
+              <td>{p.productName}</td>
+              <td>{p.category}</td>
+              <td>{p.quantityInStock}</td>
+              <td style={{ color: '#b91c1c', fontSize: '0.82rem' }}>
+                {new Date(p.lastUpdated).toLocaleDateString()}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 export const DashboardPage: React.FC = () => {
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -29,20 +100,17 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="card" style={{ maxWidth: '600px' }}>
-          <h3>Quick Actions</h3>
+        <div className="card" style={{ maxWidth: '600px', marginBottom: '1rem' }}>
+          <h3 style={{ margin: '0 0 0.75rem' }}>Quick Actions</h3>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link to="/invoices/new" className="btn">
-              + New Invoice
-            </Link>
-            <Link to="/invoices" className="btn secondary">
-              View Invoices
-            </Link>
-            <Link to="/products" className="btn secondary">
-              View Products
-            </Link>
+            <Link to="/invoices/new" className="btn">+ New Invoice</Link>
+            <Link to="/invoices" className="btn secondary">View Invoices</Link>
+            <Link to="/products" className="btn secondary">View Products</Link>
+            <Link to="/expenses" className="btn secondary">Log Expense</Link>
+            <Link to="/product-requests" className="btn secondary">Product Requests</Link>
           </div>
         </div>
+        <StaffExpenseSummary />
       </div>
     );
   }
@@ -136,6 +204,7 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
       </div>
+      <AdminDeadStock />
     </div>
   );
 };

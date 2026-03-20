@@ -99,5 +99,18 @@ export class ProductsService {
     const cats = await this.productModel.distinct('category', { isArchived: { $ne: true } }).exec();
     return cats.sort();
   }
+
+  async findDeadStock(days = 30): Promise<Product[]> {
+    // Products not sold in the last X days — we flag by lastUpdated as a proxy
+    // The real check is done via invoice data in the reports module,
+    // but here we return products with no stock movement (lastUpdated old)
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    return this.productModel.find({
+      isArchived: { $ne: true },
+      quantityInStock: { $gt: 0 },
+      lastUpdated: { $lt: cutoff },
+    }).exec();
+  }
 }
 

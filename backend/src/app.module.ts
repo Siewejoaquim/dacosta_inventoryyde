@@ -7,13 +7,12 @@ import { ProductsModule } from './products/products.module';
 import { StockModule } from './stock/stock.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { ReportsModule } from './reports/reports.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { ProductRequestsModule } from './product-requests/product-requests.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -27,6 +26,8 @@ import { ReportsModule } from './reports/reports.module';
     StockModule,
     InvoicesModule,
     ReportsModule,
+    ExpensesModule,
+    ProductRequestsModule,
   ],
 })
 export class AppModule {}

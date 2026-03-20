@@ -59,6 +59,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <>
               <NavLink to="/products" onClick={() => setMobileMenuOpen(false)}>Products</NavLink>
               <NavLink to="/invoices" onClick={() => setMobileMenuOpen(false)}>Invoices</NavLink>
+              <NavLink to="/expenses" onClick={() => setMobileMenuOpen(false)}>Expenses</NavLink>
+              <NavLink to="/product-requests" onClick={() => setMobileMenuOpen(false)}>Product Requests</NavLink>
               <NavLink to="/reports" onClick={() => setMobileMenuOpen(false)}>Reports</NavLink>
             </>
           )}

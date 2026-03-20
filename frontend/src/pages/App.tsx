@@ -13,6 +13,8 @@ import { ReportsPage } from './ReportsPage';
 import { UsersPage } from './UsersPage';
 import { StockHistoryPage } from './StockHistoryPage';
 import { ChangePasswordPage } from './ChangePasswordPage';
+import { ExpensesPage } from './ExpensesPage';
+import { ProductRequestsPage } from './ProductRequestsPage';
 
 interface RequireAuthProps {
   children: React.ReactNode;
@@ -50,6 +52,8 @@ export const App: React.FC = () => {
       <Route path="/reports" element={wrap(<ReportsPage />, ['ADMIN', 'STAFF'])} />
       <Route path="/stock-history" element={wrap(<StockHistoryPage />, ['ADMIN'])} />
       <Route path="/users" element={wrap(<UsersPage />, ['ADMIN'])} />
+      <Route path="/expenses" element={wrap(<ExpensesPage />)} />
+      <Route path="/product-requests" element={wrap(<ProductRequestsPage />)} />
       <Route path="/change-password" element={wrap(<ChangePasswordPage />)} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
