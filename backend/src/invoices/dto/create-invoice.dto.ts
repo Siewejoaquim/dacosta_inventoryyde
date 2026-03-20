@@ -33,6 +33,15 @@ export class CreateInvoiceDto {
   @IsString()
   customerPhone?: string;
 
+  @IsOptional()
+  @IsString()
+  status?: 'PAID' | 'UNPAID' | 'PARTIAL';
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountPaid?: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => InvoiceItemInput)

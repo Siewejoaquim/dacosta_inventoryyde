@@ -132,9 +132,7 @@ export const DashboardPage: React.FC = () => {
         <div className="page-header">
           <div>
             <h2 style={{ margin: 0 }}>Welcome</h2>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-              Staff dashboard - Create and manage invoices
-            </div>
+          <div className="page-header-sub">Staff dashboard — create invoices and log expenses</div>
           </div>
         </div>
         <div className="card" style={{ maxWidth: '600px', marginBottom: '1rem' }}>
@@ -157,50 +155,48 @@ export const DashboardPage: React.FC = () => {
       <div className="page-header">
         <div>
           <h2 style={{ margin: 0 }}>Dashboard</h2>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-            Overview of DaCosta All Motors inventory and sales.
-          </div>
+          <div className="page-header-sub">Overview of DaCosta All Motors inventory and sales.</div>
         </div>
       </div>
 
       <div className="card-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="card-title">Total Products</div>
           <div className="card-value">{data?.totalProducts}</div>
         </div>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="card-title">Sales Today</div>
           <div className="card-value">
             Fr {data?.totalSalesToday.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>
+          <div className="card-sub">
             Expenses: Fr {(data?.expensesToday ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className="card">
+        <div className="card accent-green">
           <div className="card-title">Net Today</div>
-          <div className="card-value" style={{ color: (data?.netToday ?? 0) >= 0 ? '#166534' : '#b91c1c' }}>
+          <div className="card-value" style={{ color: (data?.netToday ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
             Fr {(data?.netToday ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="card-title">Weekly Sales</div>
           <div className="card-value">
             Fr {data?.weeklySales.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className="card">
+        <div className="card accent-blue">
           <div className="card-title">Monthly Revenue</div>
           <div className="card-value">
             Fr {data?.monthlyRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>
+          <div className="card-sub">
             Expenses: Fr {(data?.expensesMonthly ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>
-        <div className="card">
+        <div className="card accent-green">
           <div className="card-title">Net This Month</div>
-          <div className="card-value" style={{ color: (data?.netMonthly ?? 0) >= 0 ? '#166534' : '#b91c1c' }}>
+          <div className="card-value" style={{ color: (data?.netMonthly ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
             Fr {(data?.netMonthly ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>

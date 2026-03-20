@@ -5,6 +5,8 @@ export const InvoiceCreatePage: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'UNPAID' | 'PARTIAL'>('UNPAID');
+  const [amountPaid, setAmountPaid] = useState<number>(0);
   const [items, setItems] = useState<
     { productId: string; quantity: number; unitPrice: number }[]
   >([]);
@@ -21,6 +23,7 @@ export const InvoiceCreatePage: React.FC = () => {
   useEffect(() => {
     const calculatedTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     setTotal(calculatedTotal);
+    if (paymentStatus === 'PAID') setAmountPaid(calculatedTotal);
   }, [items]);
 
   const handleItemChange = (
@@ -52,6 +55,8 @@ export const InvoiceCreatePage: React.FC = () => {
     const payload = {
       customerName,
       customerPhone,
+      status: paymentStatus,
+      amountPaid: paymentStatus === 'PAID' ? total : amountPaid,
       items: items.map((it) => ({
         ...it,
         productName: products.find((p) => p._id === it.productId)?.productName ?? '',
@@ -59,7 +64,6 @@ export const InvoiceCreatePage: React.FC = () => {
     };
     try {
       const response = await api.post('/invoices', payload);
-      setInvoiceNumber(response.data.invoiceNumber);
       
       // Create a new window for printing
       const printWindow = window.open('', '', 'width=800,height=600');
@@ -257,6 +261,37 @@ export const InvoiceCreatePage: React.FC = () => {
                   onChange={(e) => setCustomerPhone(e.target.value)}
                 />
               </div>
+              <div>
+                <label>Payment status</label>
+                <select
+                  className="select"
+                  value={paymentStatus}
+                  onChange={(e) => {
+                    const val = e.target.value as 'PAID' | 'UNPAID' | 'PARTIAL';
+                    setPaymentStatus(val);
+                    if (val === 'PAID') setAmountPaid(total);
+                    if (val === 'UNPAID') setAmountPaid(0);
+                  }}
+                >
+                  <option value="UNPAID">Unpaid</option>
+                  <option value="PAID">Paid in full</option>
+                  <option value="PARTIAL">Partial payment</option>
+                </select>
+              </div>
+              {paymentStatus === 'PARTIAL' && (
+                <div>
+                  <label>Amount paid (Fr)</label>
+                  <input
+                    type="number"
+                    className="input"
+                    min={0}
+                    max={total}
+                    value={amountPaid}
+                    onChange={(e) => setAmountPaid(Number(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
             </div>
             <table className="table">
               <thead>

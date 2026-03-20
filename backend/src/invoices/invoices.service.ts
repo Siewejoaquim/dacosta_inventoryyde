@@ -46,6 +46,15 @@ export class InvoicesService {
       });
     }
 
+    const amountPaid = dto.amountPaid ?? 0;
+    let status: string = dto.status ?? 'UNPAID';
+    // Auto-derive status from amountPaid if not explicitly set
+    if (!dto.status) {
+      if (amountPaid <= 0) status = 'UNPAID';
+      else if (amountPaid >= totalAmount) status = 'PAID';
+      else status = 'PARTIAL';
+    }
+
     const created = new this.invoiceModel({
       invoiceNumber: this.generateInvoiceNumber(),
       customerName: dto.customerName,
@@ -53,8 +62,8 @@ export class InvoicesService {
       itemsPurchased,
       totalAmount,
       createdBy: new Types.ObjectId(userId),
-      status: 'UNPAID',
-      amountPaid: 0,
+      status,
+      amountPaid,
     });
     return created.save();
   }
