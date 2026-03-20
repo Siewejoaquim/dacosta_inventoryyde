@@ -34,7 +34,7 @@ export function useDashboardSummary() {
         totalSalesToday: todaysSales,
         weeklySales: weekly.totalSales,
         monthlyRevenue: monthly.totalMonthlyRevenue,
-        lowStock: products.filter((p) => p.quantityInStock < 5),
+        lowStock: products.filter((p) => p.quantityInStock < (p.reorderPoint ?? 5)),
         recentInvoices: invoices.slice(0, 5),
       };
     },

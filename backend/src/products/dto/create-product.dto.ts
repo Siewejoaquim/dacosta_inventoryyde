@@ -22,5 +22,10 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   sellingPrice!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
 }
 

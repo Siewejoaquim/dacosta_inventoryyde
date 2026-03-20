@@ -36,7 +36,7 @@ export class ReportsService {
   async getWeeklyReport(referenceDate: Date) {
     const { start, end } = this.getWeekRange(referenceDate);
     const invoices = await this.invoiceModel
-      .find({ dateCreated: { $gte: start, $lte: end } })
+      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
       .exec();
 
     const totalSales = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
@@ -60,7 +60,10 @@ export class ReportsService {
       .slice(0, 5);
 
     const lowStockProducts = await this.productModel
-      .find({ quantityInStock: { $lt: 5 } })
+      .find({
+        $expr: { $lt: ['$quantityInStock', '$reorderPoint'] },
+        isArchived: { $ne: true },
+      })
       .exec();
 
     return {
@@ -76,7 +79,7 @@ export class ReportsService {
   async getMonthlyReport(referenceDate: Date) {
     const { start, end } = this.getMonthRange(referenceDate);
     const invoices = await this.invoiceModel
-      .find({ dateCreated: { $gte: start, $lte: end } })
+      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
       .exec();
 
     const totalMonthlyRevenue = invoices.reduce(
@@ -104,8 +107,8 @@ export class ReportsService {
       .slice(0, 5);
 
     const inventoryStatus = await this.productModel
-      .find()
-      .select('productName quantityInStock category')
+      .find({ isArchived: { $ne: true } })
+      .select('productName quantityInStock category reorderPoint')
       .exec();
 
     return {
@@ -113,6 +116,40 @@ export class ReportsService {
       totalProductsSold,
       bestSellingProducts,
       inventoryStatus,
+      start,
+      end,
+    };
+  }
+
+  async getCustomReport(start: Date, end: Date) {
+    const invoices = await this.invoiceModel
+      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
+      .exec();
+
+    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    let totalProductsSold = 0;
+    const productCounts: Record<string, { name: string; quantity: number; revenue: number }> = {};
+
+    invoices.forEach((inv) => {
+      inv.itemsPurchased.forEach((item) => {
+        totalProductsSold += item.quantity;
+        if (!productCounts[item.productId.toString()]) {
+          productCounts[item.productId.toString()] = { name: item.productName, quantity: 0, revenue: 0 };
+        }
+        productCounts[item.productId.toString()].quantity += item.quantity;
+        productCounts[item.productId.toString()].revenue += item.totalPrice;
+      });
+    });
+
+    const topProducts = Object.values(productCounts)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    return {
+      totalRevenue,
+      totalProductsSold,
+      numberOfInvoices: invoices.length,
+      topProducts,
       start,
       end,
     };

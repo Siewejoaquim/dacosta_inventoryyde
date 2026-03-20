@@ -12,13 +12,20 @@ import { UserRole } from '../common/enums/role.enum';
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
+  @Get('categories')
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
+  getCategories() {
+    return this.productsService.getCategories();
+  }
+
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   findAll(
     @Query('search') search?: string,
     @Query('category') category?: string,
+    @Query('includeArchived') includeArchived?: string,
   ) {
-    return this.productsService.findAll({ search, category });
+    return this.productsService.findAll({ search, category, includeArchived: includeArchived === 'true' });
   }
 
   @Get(':id')
@@ -33,6 +40,12 @@ export class ProductsController {
     return this.productsService.create(dto);
   }
 
+  @Patch(':id/restore')
+  @Roles(UserRole.ADMIN)
+  restore(@Param('id') id: string) {
+    return this.productsService.restore(id);
+  }
+
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
@@ -45,4 +58,3 @@ export class ProductsController {
     return this.productsService.remove(id);
   }
 }
-

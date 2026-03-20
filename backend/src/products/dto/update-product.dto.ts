@@ -27,5 +27,10 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   sellingPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
 }
 

@@ -21,6 +21,8 @@ export class InvoiceItem {
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
 
+export type InvoiceStatus = 'PAID' | 'UNPAID' | 'PARTIAL' | 'VOID';
+
 @Schema({ timestamps: { createdAt: 'dateCreated', updatedAt: false } })
 export class Invoice extends Document {
   @Prop({ required: true, unique: true })
@@ -40,6 +42,18 @@ export class Invoice extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy!: Types.ObjectId;
+
+  @Prop({ type: String, enum: ['PAID', 'UNPAID', 'PARTIAL', 'VOID'], default: 'UNPAID' })
+  status!: InvoiceStatus;
+
+  @Prop({ default: 0 })
+  amountPaid!: number;
+
+  @Prop()
+  voidedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  voidedBy?: Types.ObjectId;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

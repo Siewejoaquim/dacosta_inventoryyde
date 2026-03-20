@@ -15,6 +15,7 @@ export const ProductFormPage: React.FC = () => {
     quantityInStock: 0,
     purchasePrice: 0,
     sellingPrice: 0,
+    reorderPoint: 5,
   });
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export const ProductFormPage: React.FC = () => {
     setForm((f) => ({
       ...f,
       [name]:
-        name === 'quantityInStock' || name.endsWith('Price') ? Number(value) : value,
+        name === 'quantityInStock' || name.endsWith('Price') || name === 'reorderPoint' ? Number(value) : value,
     }));
   };
 
@@ -55,6 +56,7 @@ export const ProductFormPage: React.FC = () => {
         quantityInStock: form.quantityInStock,
         purchasePrice: form.purchasePrice,
         sellingPrice: form.sellingPrice,
+        reorderPoint: form.reorderPoint,
       };
       
       if (isEdit) {
@@ -146,6 +148,17 @@ export const ProductFormPage: React.FC = () => {
               value={form.sellingPrice}
               onChange={handleChange}
               required
+            />
+          </div>
+          <div>
+            <label>Reorder point</label>
+            <input
+              type="number"
+              className="input"
+              name="reorderPoint"
+              value={form.reorderPoint}
+              onChange={handleChange}
+              min={0}
             />
           </div>
           <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>

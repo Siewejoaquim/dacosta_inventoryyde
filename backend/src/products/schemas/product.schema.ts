@@ -20,6 +20,12 @@ export class Product extends Document {
 
   @Prop({ required: true, min: 0 })
   sellingPrice!: number;
+
+  @Prop({ min: 0, default: 5 })
+  reorderPoint!: number;
+
+  @Prop({ default: false })
+  isArchived!: boolean;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

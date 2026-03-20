@@ -1,0 +1,190 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../api/client';
+import { decodeToken } from '../api/auth';
+
+export const InvoiceDetailPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [invoice, setInvoice] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [amountPaid, setAmountPaid] = useState('');
+  const [saving, setSaving] = useState(false);
+  const user = decodeToken();
+  const isAdmin = user?.role === 'ADMIN';
+
+  const load = async () => {
+    try {
+      const res = await api.get(`/invoices/${id}`);
+      setInvoice(res.data);
+      setAmountPaid(String(res.data.amountPaid ?? 0));
+    } catch {
+      alert('Invoice not found');
+      navigate('/invoices');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [id]);
+
+  const handlePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.patch(`/invoices/${id}/payment`, { amountPaid: Number(amountPaid) });
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message ?? 'Failed to update payment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVoid = async () => {
+    if (!window.confirm('Void this invoice? Stock will be restored.')) return;
+    try {
+      await api.patch(`/invoices/${id}/void`);
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message ?? 'Failed to void invoice');
+    }
+  };
+
+  const handlePrint = () => {
+    if (!invoice) return;
+    const win = window.open('', '', 'width=800,height=600');
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><title>${invoice.invoiceNumber}</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}</style></head>
+      <body>
+        <h2>DaCosta All Motors</h2>
+        <p><strong>Invoice:</strong> ${invoice.invoiceNumber}</p>
+        <p><strong>Customer:</strong> ${invoice.customerName}${invoice.customerPhone ? ' | ' + invoice.customerPhone : ''}</p>
+        <p><strong>Date:</strong> ${new Date(invoice.dateCreated).toLocaleString()}</p>
+        <p><strong>Status:</strong> ${invoice.status}</p>
+        <table><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <tbody>${invoice.itemsPurchased.map((it: any) =>
+          `<tr><td>${it.productName}</td><td>${it.quantity}</td><td>Fr ${it.unitPrice.toLocaleString()}</td><td>Fr ${it.totalPrice.toLocaleString()}</td></tr>`
+        ).join('')}</tbody></table>
+        <p style="text-align:right;font-size:1.1rem"><strong>Total: Fr ${invoice.totalAmount.toLocaleString()}</strong></p>
+        <p style="text-align:right">Amount Paid: Fr ${(invoice.amountPaid ?? 0).toLocaleString()}</p>
+        <p style="text-align:right">Balance: Fr ${(invoice.totalAmount - (invoice.amountPaid ?? 0)).toLocaleString()}</p>
+      </body></html>`);
+    win.document.close();
+    win.print();
+  };
+
+  if (loading) return <div>Loading...</div>;
+  if (!invoice) return null;
+
+  const balance = invoice.totalAmount - (invoice.amountPaid ?? 0);
+  const statusColors: Record<string, string> = {
+    PAID: '#dcfce7', UNPAID: '#fee2e2', PARTIAL: '#fef9c3', VOID: '#e5e7eb',
+  };
+  const statusText: Record<string, string> = {
+    PAID: '#166534', UNPAID: '#b91c1c', PARTIAL: '#854d0e', VOID: '#374151',
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h2 style={{ margin: 0 }}>{invoice.invoiceNumber}</h2>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+            {new Date(invoice.dateCreated).toLocaleString()}
+            {invoice.createdBy && ` · Created by ${invoice.createdBy.name}`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn secondary" onClick={handlePrint}>Print</button>
+          {isAdmin && invoice.status !== 'VOID' && (
+            <button className="btn" style={{ background: '#b91c1c' }} onClick={handleVoid}>
+              Void Invoice
+            </button>
+          )}
+          <button className="btn secondary" onClick={() => navigate('/invoices')}>← Back</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.2rem' }}>
+        <div className="card">
+          <div className="card-title">Items</div>
+          <table className="table">
+            <thead>
+              <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              {invoice.itemsPurchased.map((item: any, i: number) => (
+                <tr key={i}>
+                  <td>{item.productName}</td>
+                  <td>{item.quantity}</td>
+                  <td>Fr {item.unitPrice.toLocaleString()}</td>
+                  <td>Fr {item.totalPrice.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ textAlign: 'right', marginTop: '0.75rem', fontWeight: 700, fontSize: '1.1rem' }}>
+            Total: Fr {invoice.totalAmount.toLocaleString()}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="card">
+            <div className="card-title">Customer</div>
+            <div style={{ fontWeight: 600 }}>{invoice.customerName}</div>
+            {invoice.customerPhone && <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>{invoice.customerPhone}</div>}
+          </div>
+
+          <div className="card">
+            <div className="card-title">Payment</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{
+                padding: '0.2rem 0.7rem', borderRadius: 999, fontSize: '0.8rem', fontWeight: 600,
+                background: statusColors[invoice.status] ?? '#e5e7eb',
+                color: statusText[invoice.status] ?? '#374151',
+              }}>{invoice.status}</span>
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+              Amount Paid: Fr {(invoice.amountPaid ?? 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: balance > 0 ? '#b91c1c' : '#166534', fontWeight: 600 }}>
+              Balance: Fr {balance.toLocaleString()}
+            </div>
+
+            {invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
+              <form onSubmit={handlePayment} style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={invoice.totalAmount}
+                  step="0.01"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  placeholder="Amount paid"
+                />
+                <button className="btn" type="submit" disabled={saving}>
+                  {saving ? '...' : 'Save'}
+                </button>
+              </form>
+            )}
+          </div>
+
+          {invoice.status === 'VOID' && (
+            <div className="card" style={{ background: '#f9fafb' }}>
+              <div style={{ color: '#b91c1c', fontWeight: 600 }}>Voided</div>
+              {invoice.voidedAt && (
+                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                  {new Date(invoice.voidedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

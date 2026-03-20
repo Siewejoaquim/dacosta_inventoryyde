@@ -17,8 +17,12 @@ export class ProductsService {
   async findAll(params: {
     search?: string;
     category?: string;
+    includeArchived?: boolean;
   }): Promise<Product[]> {
     const filter: FilterQuery<Product> = {};
+    if (!params.includeArchived) {
+      filter.isArchived = { $ne: true };
+    }
     if (params.search) {
       filter.productName = { $regex: params.search, $options: 'i' };
     }
@@ -47,10 +51,18 @@ export class ProductsService {
   }
 
   async remove(id: string): Promise<void> {
-    const res = await this.productModel.findByIdAndDelete(id).exec();
-    if (!res) {
+    const product = await this.productModel.findByIdAndUpdate(id, { isArchived: true }, { new: true }).exec();
+    if (!product) {
       throw new NotFoundException('Product not found');
     }
+  }
+
+  async restore(id: string): Promise<Product> {
+    const product = await this.productModel.findByIdAndUpdate(id, { isArchived: false }, { new: true }).exec();
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+    return product;
   }
 
   async decreaseStock(productId: string, quantity: number): Promise<Product> {
@@ -72,8 +84,20 @@ export class ProductsService {
     return this.productModel.countDocuments().exec();
   }
 
-  async findLowStock(threshold = 5): Promise<Product[]> {
-    return this.productModel.find({ quantityInStock: { $lt: threshold } }).exec();
+  async findLowStock(threshold?: number): Promise<Product[]> {
+    if (threshold !== undefined) {
+      return this.productModel.find({ quantityInStock: { $lt: threshold }, isArchived: { $ne: true } }).exec();
+    }
+    // Use per-product reorderPoint
+    return this.productModel.find({
+      $expr: { $lt: ['$quantityInStock', '$reorderPoint'] },
+      isArchived: { $ne: true },
+    }).exec();
+  }
+
+  async getCategories(): Promise<string[]> {
+    const cats = await this.productModel.distinct('category', { isArchived: { $ne: true } }).exec();
+    return cats.sort();
   }
 }
 

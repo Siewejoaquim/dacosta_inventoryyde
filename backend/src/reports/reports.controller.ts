@@ -22,5 +22,13 @@ export class ReportsController {
     const refDate = date ? new Date(date) : new Date();
     return this.reportsService.getMonthlyReport(refDate);
   }
+
+  @Get('custom')
+  custom(@Query('from') from: string, @Query('to') to: string) {
+    const start = from ? new Date(from) : new Date(new Date().setDate(1));
+    const end = to ? new Date(to) : new Date();
+    end.setHours(23, 59, 59, 999);
+    return this.reportsService.getCustomReport(start, end);
+  }
 }
 
