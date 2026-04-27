@@ -33,7 +33,12 @@ export const NotificationCenter: React.FC = () => {
       ]);
       setNotifications(notifRes.data);
       setUnreadCount(countRes.data.unreadCount);
-    } catch (error) {
+    } catch (error: any) {
+      // Silently fail if notifications endpoint doesn't exist yet (404)
+      if (error.response?.status === 404) {
+        console.log('Notifications endpoint not yet available');
+        return;
+      }
       console.error('Failed to load notifications:', error);
     }
   };

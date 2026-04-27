@@ -5,7 +5,6 @@ import { Invoice } from './schemas/invoice.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ProductsService } from '../products/products.service';
 import { StockService } from '../stock/stock.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { UserRole } from '../common/enums/role.enum';
 
 @Injectable()
@@ -14,7 +13,6 @@ export class InvoicesService {
     @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
     private readonly productsService: ProductsService,
     private readonly stockService: StockService,
-    private readonly notificationsService: NotificationsService,
   ) {}
 
   private generateInvoiceNumber() {
@@ -72,17 +70,7 @@ export class InvoicesService {
       status,
       amountPaid,
     });
-    const saved = await created.save();
-
-    // Send notification
-    await this.notificationsService.notifyInvoiceCreated(
-      userId,
-      saved.invoiceNumber,
-      dto.customerName,
-      totalAmount,
-    );
-
-    return saved;
+    return created.save();
   }
 
   async updatePayment(id: string, amountPaid: number, userId: string, userRole: string): Promise<Invoice> {
@@ -103,17 +91,6 @@ export class InvoicesService {
       { amountPaid, status },
       { new: true },
     ).populate('createdBy', 'name username').exec();
-
-    // Send notification if payment received
-    if (status === 'PAID' || (status === 'PARTIAL' && invoice.status === 'UNPAID')) {
-      await this.notificationsService.notifyPaymentReceived(
-        userId,
-        invoice.invoiceNumber,
-        invoice.customerName,
-        amountPaid,
-      );
-    }
-
     return updated!;
   }
 
