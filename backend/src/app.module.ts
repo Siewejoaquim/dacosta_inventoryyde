@@ -11,7 +11,6 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { ReportsModule } from './reports/reports.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { ProductRequestsModule } from './product-requests/product-requests.module';
-import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,7 +32,6 @@ import { NotificationsModule } from './notifications/notifications.module';
     ReportsModule,
     ExpensesModule,
     ProductRequestsModule,
-    NotificationsModule,
   ],
   providers: [
     // Apply rate limiting globally
