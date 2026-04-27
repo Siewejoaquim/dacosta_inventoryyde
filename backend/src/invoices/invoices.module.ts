@@ -5,11 +5,13 @@ import { InvoicesController } from './invoices.controller';
 import { Invoice, InvoiceSchema } from './schemas/invoice.schema';
 import { ProductsModule } from '../products/products.module';
 import { StockModule } from '../stock/stock.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     ProductsModule,
     StockModule,
+    NotificationsModule,
     MongooseModule.forFeature([{ name: Invoice.name, schema: InvoiceSchema }]),
   ],
   controllers: [InvoicesController],

@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { decodeToken, UserInfo } from '../api/auth';
+import { NotificationCenter } from './NotificationCenter';
 import {
   RiDashboardLine,
   RiBox3Line,
@@ -122,6 +123,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
 
         <div className="sidebar-footer">
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <NotificationCenter />
+          </div>
           <button className="btn secondary" onClick={handleLogout}>
             <RiLogoutBoxLine size={15} />
             Logout
