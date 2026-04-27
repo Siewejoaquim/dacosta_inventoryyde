@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { decodeToken } from '../api/auth';
+import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/ConfirmModal';
 
 export const InvoiceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +14,8 @@ export const InvoiceDetailPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const user = decodeToken();
   const isAdmin = user?.role === 'ADMIN';
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = async () => {
     try {
@@ -19,7 +23,7 @@ export const InvoiceDetailPage: React.FC = () => {
       setInvoice(res.data);
       setAmountPaid(String(res.data.amountPaid ?? 0));
     } catch {
-      alert('Invoice not found');
+      toast.error('Invoice not found');
       navigate('/invoices');
     } finally {
       setLoading(false);
@@ -33,21 +37,29 @@ export const InvoiceDetailPage: React.FC = () => {
     setSaving(true);
     try {
       await api.patch(`/invoices/${id}/payment`, { amountPaid: Number(amountPaid) });
+      toast.success('Payment updated successfully');
       load();
     } catch (err: any) {
-      alert(err.response?.data?.message ?? 'Failed to update payment');
+      toast.error(err.response?.data?.message ?? 'Failed to update payment');
     } finally {
       setSaving(false);
     }
   };
 
   const handleVoid = async () => {
-    if (!window.confirm('Void this invoice? Stock will be restored.')) return;
+    const ok = await confirm({
+      title: 'Void this invoice?',
+      message: 'This will cancel the invoice and restore all stock quantities. This cannot be undone.',
+      confirmLabel: 'Void Invoice',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.patch(`/invoices/${id}/void`);
+      toast.success('Invoice voided and stock restored');
       load();
     } catch (err: any) {
-      alert(err.response?.data?.message ?? 'Failed to void invoice');
+      toast.error(err.response?.data?.message ?? 'Failed to void invoice');
     }
   };
 
@@ -55,22 +67,33 @@ export const InvoiceDetailPage: React.FC = () => {
     if (!invoice) return;
     const win = window.open('', '', 'width=800,height=600');
     if (!win) return;
+    const paid = invoice.amountPaid ?? 0;
+    const isPartial = invoice.status === 'PARTIAL';
+    const originalAmt = (invoice as any).originalAmount;
+    const paymentLine = invoice.status === 'PAID'
+      ? `<p style="text-align:right;color:#15803d;font-weight:bold">PAID IN FULL</p>`
+      : isPartial && originalAmt
+      ? `<p style="text-align:right;text-decoration:line-through;color:#999">Original Price: Fr ${originalAmt.toLocaleString()}</p>
+         <p style="text-align:right;color:#15803d;font-weight:bold">Discounted Price: Fr ${invoice.totalAmount.toLocaleString()}</p>`
+      : `<p style="text-align:right;color:#b91c1c;font-weight:bold">UNPAID — Balance Due: Fr ${invoice.totalAmount.toLocaleString()}</p>`;
     win.document.write(`<!DOCTYPE html><html><head><title>${invoice.invoiceNumber}</title>
       <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}</style></head>
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}
+      .total-block{border-top:2px solid #000;border-bottom:2px solid #000;padding:12px 0;margin-top:12px}</style></head>
       <body>
-        <h2>DaCosta All Motors</h2>
+        <h2 style="text-align:center">DACOSTA ALL MOTORS</h2>
+        <p style="text-align:center;color:#666">INVOICE</p>
         <p><strong>Invoice:</strong> ${invoice.invoiceNumber}</p>
         <p><strong>Customer:</strong> ${invoice.customerName}${invoice.customerPhone ? ' | ' + invoice.customerPhone : ''}</p>
         <p><strong>Date:</strong> ${new Date(invoice.dateCreated).toLocaleString()}</p>
-        <p><strong>Status:</strong> ${invoice.status}</p>
         <table><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
         <tbody>${invoice.itemsPurchased.map((it: any) =>
           `<tr><td>${it.productName}</td><td>${it.quantity}</td><td>Fr ${it.unitPrice.toLocaleString()}</td><td>Fr ${it.totalPrice.toLocaleString()}</td></tr>`
         ).join('')}</tbody></table>
-        <p style="text-align:right;font-size:1.1rem"><strong>Total: Fr ${invoice.totalAmount.toLocaleString()}</strong></p>
-        <p style="text-align:right">Amount Paid: Fr ${(invoice.amountPaid ?? 0).toLocaleString()}</p>
-        <p style="text-align:right">Balance: Fr ${(invoice.totalAmount - (invoice.amountPaid ?? 0)).toLocaleString()}</p>
+        <div class="total-block">
+          <p style="text-align:right;font-size:1.1rem"><strong>Total Amount: Fr ${invoice.totalAmount.toLocaleString()}</strong></p>
+          ${paymentLine}
+        </div>
       </body></html>`);
     win.document.close();
     win.print();
@@ -126,8 +149,15 @@ export const InvoiceDetailPage: React.FC = () => {
               ))}
             </tbody>
           </table>
-          <div style={{ textAlign: 'right', marginTop: '0.75rem', fontWeight: 700, fontSize: '1.1rem' }}>
-            Total: Fr {invoice.totalAmount.toLocaleString()}
+          <div style={{ textAlign: 'right', marginTop: '0.75rem' }}>
+            {invoice.status === 'PARTIAL' && (invoice as any).originalAmount && (
+              <div style={{ fontSize: '0.85rem', color: '#999', textDecoration: 'line-through', marginBottom: 4 }}>
+                Original: Fr {((invoice as any).originalAmount).toLocaleString()}
+              </div>
+            )}
+            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+              {invoice.status === 'PARTIAL' ? 'Discounted Price' : 'Total'}: Fr {invoice.totalAmount.toLocaleString()}
+            </div>
           </div>
         </div>
 

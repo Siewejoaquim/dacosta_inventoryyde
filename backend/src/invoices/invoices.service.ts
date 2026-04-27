@@ -27,13 +27,13 @@ export class InvoicesService {
 
   async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
     const itemsPurchased = [];
-    let totalAmount = 0;
+    let calculatedTotal = 0;
 
     for (const item of dto.items) {
       const product = await this.productsService.findById(item.productId);
       const unitPrice = item.unitPrice ?? product.sellingPrice;
       const totalPrice = unitPrice * item.quantity;
-      totalAmount += totalPrice;
+      calculatedTotal += totalPrice;
 
       await this.stockService.decreaseStock(item.productId, item.quantity, userId);
 
@@ -51,9 +51,13 @@ export class InvoicesService {
     // Auto-derive status from amountPaid if not explicitly set
     if (!dto.status) {
       if (amountPaid <= 0) status = 'UNPAID';
-      else if (amountPaid >= totalAmount) status = 'PAID';
+      else if (amountPaid >= calculatedTotal) status = 'PAID';
       else status = 'PARTIAL';
     }
+
+    // For PARTIAL: totalAmount = amountPaid (discounted price), originalAmount = calculatedTotal
+    const totalAmount = status === 'PARTIAL' ? amountPaid : calculatedTotal;
+    const originalAmount = status === 'PARTIAL' ? calculatedTotal : undefined;
 
     const created = new this.invoiceModel({
       invoiceNumber: this.generateInvoiceNumber(),
@@ -61,6 +65,7 @@ export class InvoicesService {
       customerPhone: dto.customerPhone,
       itemsPurchased,
       totalAmount,
+      originalAmount,
       createdBy: new Types.ObjectId(userId),
       status,
       amountPaid,

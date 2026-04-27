@@ -11,6 +11,7 @@ export const InvoiceCreatePage: React.FC = () => {
     { productId: string; quantity: number; unitPrice: number }[]
   >([]);
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [originalTotal, setOriginalTotal] = useState(0);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
@@ -22,9 +23,15 @@ export const InvoiceCreatePage: React.FC = () => {
 
   useEffect(() => {
     const calculatedTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    setTotal(calculatedTotal);
-    if (paymentStatus === 'PAID') setAmountPaid(calculatedTotal);
-  }, [items]);
+    setOriginalTotal(calculatedTotal);
+    // For PARTIAL, total = amountPaid (discounted price). Otherwise, total = originalTotal
+    if (paymentStatus === 'PARTIAL') {
+      setTotal(amountPaid > 0 ? amountPaid : calculatedTotal);
+    } else {
+      setTotal(calculatedTotal);
+      if (paymentStatus === 'PAID') setAmountPaid(calculatedTotal);
+    }
+  }, [items, paymentStatus, amountPaid]);
 
   const handleItemChange = (
     index: number,
@@ -52,11 +59,13 @@ export const InvoiceCreatePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // For PARTIAL: total = amountPaid (what they actually paid)
+    const finalTotal = paymentStatus === 'PARTIAL' ? amountPaid : total;
     const payload = {
       customerName,
       customerPhone,
       status: paymentStatus,
-      amountPaid: paymentStatus === 'PAID' ? total : amountPaid,
+      amountPaid: paymentStatus === 'PAID' ? finalTotal : (paymentStatus === 'PARTIAL' ? amountPaid : 0),
       items: items.map((it) => ({
         ...it,
         productName: products.find((p) => p._id === it.productId)?.productName ?? '',
@@ -205,7 +214,16 @@ export const InvoiceCreatePage: React.FC = () => {
                 
                 <div class="total-section">
                   <div class="total-label">TOTAL AMOUNT:</div>
-                  <div class="total-amount">Fr ${total.toLocaleString()}</div>
+                  <div class="total-amount">Fr ${(paymentStatus === 'PARTIAL' ? amountPaid : total).toLocaleString()}</div>
+                  ${paymentStatus === 'PARTIAL' ? `
+                  <div style="margin-top:10px; font-size:13px; color:#555;">
+                    <div style="text-decoration:line-through; color:#999;">Original Price: Fr ${originalTotal.toLocaleString()}</div>
+                    <div style="color:#15803d; font-weight:bold; margin-top:4px;">Discounted Price: Fr ${amountPaid.toLocaleString()}</div>
+                  </div>` : ''}
+                  ${paymentStatus === 'PAID' ? `
+                  <div style="margin-top:8px; font-size:13px; color:#15803d; font-weight:bold;">PAID IN FULL</div>` : ''}
+                  ${paymentStatus === 'UNPAID' ? `
+                  <div style="margin-top:8px; font-size:13px; color:#b91c1c; font-weight:bold;">UNPAID — Balance Due: Fr ${total.toLocaleString()}</div>` : ''}
                 </div>
                 
                 <div class="footer">
@@ -354,9 +372,16 @@ export const InvoiceCreatePage: React.FC = () => {
               + Add line
             </button>
             <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>Total amount</div>
+              {paymentStatus === 'PARTIAL' && originalTotal !== amountPaid && (
+                <div style={{ fontSize: '0.85rem', color: '#999', textDecoration: 'line-through', marginBottom: 4 }}>
+                  Original: Fr {originalTotal.toLocaleString()}
+                </div>
+              )}
+              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
+                {paymentStatus === 'PARTIAL' ? 'Discounted price' : 'Total amount'}
+              </div>
               <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-                Fr {total.toLocaleString()}
+                Fr {(paymentStatus === 'PARTIAL' ? amountPaid : total).toLocaleString()}
               </div>
             </div>
             <div style={{ marginTop: '1rem', textAlign: 'right' }}>

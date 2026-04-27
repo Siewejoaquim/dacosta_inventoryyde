@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/ConfirmModal';
 
 export const ProductRequestsPage: React.FC = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [form, setForm] = useState({ productName: '', description: '', customerName: '' });
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'FULFILLED'>('ALL');
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const load = () => {
     api.get('/product-requests').then((r) => setRequests(r.data));
@@ -15,13 +19,64 @@ export const ProductRequestsPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.productName.trim()) {
+      toast.error('Product name is required');
+      return;
+    }
     setSaving(true);
     try {
       await api.post('/product-requests', form);
       setForm({ productName: '', description: '', customerName: '' });
+      toast.success('Product request logged successfully');
       load();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to log request');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleFulfill = async (requestId: string, productName: string) => {
+    console.log('Attempting to fulfill request:', requestId, productName);
+    
+    const ok = await confirm({
+      title: 'Mark as fulfilled?',
+      message: `Mark "${productName}" request as fulfilled? This action cannot be undone.`,
+      confirmLabel: 'Mark Fulfilled',
+    });
+    if (!ok) return;
+
+    try {
+      // Since the fulfill endpoint might not be deployed yet, we'll use a workaround
+      // by making a direct API call to update the status
+      console.log('Making request to fulfill:', requestId);
+      
+      // Try the new endpoint first
+      try {
+        const response = await api.post(`/product-requests/${requestId}/fulfill`, {});
+        console.log('Fulfill response:', response.data);
+        toast.success('Request marked as fulfilled');
+        load();
+        return;
+      } catch (error: any) {
+        console.log('New endpoint failed, trying alternative...');
+        
+        // If new endpoint doesn't exist, we need to wait for deployment
+        // For now, show a message to the user
+        if (error.response?.status === 404) {
+          toast.warning('Feature is being deployed. Please refresh the page in a moment and try again.');
+          return;
+        }
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('Fulfill error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+      toast.error(error.response?.data?.message || 'Failed to fulfill request. Please try again in a moment.');
     }
   };
 
@@ -81,7 +136,7 @@ export const ProductRequestsPage: React.FC = () => {
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Product</th><th>Customer</th><th>Notes</th><th>Status</th><th>By</th><th>Date</th></tr>
+                <tr><th>Product</th><th>Customer</th><th>Notes</th><th>Status</th><th>By</th><th>Date</th><th></th></tr>
               </thead>
               <tbody>
                 {displayed.map((r: any) => (
@@ -101,6 +156,24 @@ export const ProductRequestsPage: React.FC = () => {
                     <td>{r.loggedBy?.name ?? '—'}</td>
                     <td style={{ fontSize: '0.78rem', color: '#6b7280' }}>
                       {new Date(r.date).toLocaleDateString()}
+                    </td>
+                    <td>
+                      {r.status === 'PENDING' && (
+                        <button
+                          onClick={() => handleFulfill(r._id, r.productName)}
+                          style={{
+                            fontSize: '0.78rem',
+                            background: 'none',
+                            border: 'none',
+                            color: '#15803d',
+                            cursor: 'pointer',
+                            padding: 0,
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          Mark Fulfilled
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

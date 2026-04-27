@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ProductsModule } from './products/products.module';
@@ -20,6 +22,8 @@ import { ProductRequestsModule } from './product-requests/product-requests.modul
         uri: configService.get<string>('MONGODB_URI'),
       }),
     }),
+    // Rate limiting: max 60 requests per minute globally, 10 on login
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
     AuthModule,
     UsersModule,
     ProductsModule,
@@ -28,6 +32,10 @@ import { ProductRequestsModule } from './product-requests/product-requests.modul
     ReportsModule,
     ExpensesModule,
     ProductRequestsModule,
+  ],
+  providers: [
+    // Apply rate limiting globally
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

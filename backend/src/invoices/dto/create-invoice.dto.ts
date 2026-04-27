@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -14,6 +15,7 @@ class InvoiceItemInput {
   productId!: string;
 
   @IsString()
+  @MaxLength(200)
   productName!: string;
 
   @IsNumber()
@@ -27,10 +29,12 @@ class InvoiceItemInput {
 
 export class CreateInvoiceDto {
   @IsString()
+  @MaxLength(200)
   customerName!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   customerPhone?: string;
 
   @IsOptional()

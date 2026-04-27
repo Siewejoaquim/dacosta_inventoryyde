@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Expense } from './schemas/expense.schema';
 import { CreateExpenseDto } from './dto/create-expense.dto';
+import { UpdateExpenseDto } from './dto/update-expense.dto';
 
 @Injectable()
 export class ExpensesService {
@@ -15,12 +16,23 @@ export class ExpensesService {
     });
   }
 
+  async update(id: string, dto: UpdateExpenseDto, userId: string, userRole: string): Promise<Expense> {
+    const expense = await this.expenseModel.findById(id).exec();
+    if (!expense) throw new NotFoundException('Expense not found');
+    // Staff can only edit their own expenses
+    if (userRole === 'STAFF' && expense.loggedBy.toString() !== userId) {
+      throw new ForbiddenException('You can only edit your own expenses');
+    }
+    Object.assign(expense, dto);
+    return expense.save();
+  }
+
   async findToday(): Promise<Expense[]> {
     const start = new Date(); start.setHours(0, 0, 0, 0);
     const end = new Date(); end.setHours(23, 59, 59, 999);
     return this.expenseModel
       .find({ date: { $gte: start, $lte: end } })
-      .populate('loggedBy', 'name')
+      .populate('loggedBy', 'name _id')
       .sort({ date: -1 })
       .exec();
   }
@@ -28,7 +40,7 @@ export class ExpensesService {
   async findByDateRange(from: Date, to: Date): Promise<Expense[]> {
     return this.expenseModel
       .find({ date: { $gte: from, $lte: to } })
-      .populate('loggedBy', 'name')
+      .populate('loggedBy', 'name _id')
       .sort({ date: -1 })
       .exec();
   }
@@ -73,7 +85,7 @@ export class ExpensesService {
 
     const expenses = await this.expenseModel
       .find({ date: { $gte: start, $lte: end } })
-      .populate('loggedBy', 'name')
+      .populate('loggedBy', 'name _id')
       .sort({ date: -1 })
       .exec();
 

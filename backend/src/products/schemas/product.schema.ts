@@ -24,6 +24,9 @@ export class Product extends Document {
   @Prop({ min: 0, default: 5 })
   reorderPoint!: number;
 
+  @Prop()
+  description?: string;
+
   @Prop({ default: false })
   isArchived!: boolean;
 }

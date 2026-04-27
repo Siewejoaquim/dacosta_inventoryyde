@@ -40,6 +40,9 @@ export class Invoice extends Document {
   @Prop({ required: true })
   totalAmount!: number;
 
+  @Prop()
+  originalAmount?: number;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy!: Types.ObjectId;
 

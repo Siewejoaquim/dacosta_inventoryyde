@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, ValidationPipe } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -30,7 +30,7 @@ export class UsersController {
 
   @Post()
   @Roles(UserRole.ADMIN)
-  create(@Body() dto: CreateUserDto) {
+  create(@Body(new ValidationPipe({ transform: true, whitelist: true })) dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
 

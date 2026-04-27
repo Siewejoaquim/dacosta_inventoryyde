@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { RiEditLine, RiCheckLine, RiCloseLine } from 'react-icons/ri';
 import api from '../api/client';
 import { decodeToken } from '../api/auth';
+import { useToast } from '../components/Toast';
 
 const CATEGORIES = ['Food', 'Transport', 'Supplies', 'Utilities', 'Other'];
 
@@ -9,8 +11,14 @@ export const ExpensesPage: React.FC = () => {
   const [form, setForm] = useState({ description: '', amount: '', category: 'Food' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ description: '', amount: '', category: 'Food' });
+  const [editSaving, setEditSaving] = useState(false);
+
   const user = decodeToken();
   const isAdmin = user?.role === 'ADMIN';
+  const userId = user?.id;
+  const toast = useToast();
 
   const load = () => {
     api.get('/expenses/today').then((r) => setExpenses(r.data));
@@ -28,12 +36,44 @@ export const ExpensesPage: React.FC = () => {
     try {
       await api.post('/expenses', { ...form, amount: Number(form.amount) });
       setForm({ description: '', amount: '', category: 'Food' });
+      toast.success('Expense logged successfully');
       load();
     } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Failed to log expense');
+      const msg = err.response?.data?.message ?? 'Failed to log expense';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEdit = (e: any) => {
+    setEditingId(e._id);
+    setEditForm({ description: e.description, amount: String(e.amount), category: e.category });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const handleEditSave = async (id: string) => {
+    setEditSaving(true);
+    try {
+      await api.patch(`/expenses/${id}`, { ...editForm, amount: Number(editForm.amount) });
+      setEditingId(null);
+      toast.success('Expense updated');
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message ?? 'Failed to update expense');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const canEdit = (e: any) => {
+    if (isAdmin) return true;
+    const loggedById = e.loggedBy?._id ?? e.loggedBy;
+    return loggedById === userId;
   };
 
   return (
@@ -45,7 +85,7 @@ export const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 1.5fr' : '1fr 1.5fr', gap: '1.2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.2rem' }}>
         {/* Log form */}
         <div className="card">
           <div className="card-title">Log an expense</div>
@@ -82,21 +122,62 @@ export const ExpensesPage: React.FC = () => {
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Category</th><th>Description</th><th>Amount</th><th>By</th><th>Time</th></tr>
+                <tr><th>Category</th><th>Description</th><th>Amount</th><th>By</th><th>Time</th><th></th></tr>
               </thead>
               <tbody>
                 {expenses.map((e: any) => (
-                  <tr key={e._id}>
-                    <td>
-                      <span className="pill muted">{e.category}</span>
-                    </td>
-                    <td>{e.description}</td>
-                    <td>Fr {e.amount.toLocaleString()}</td>
-                    <td>{e.loggedBy?.name ?? '—'}</td>
-                    <td style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-                      {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                  </tr>
+                  editingId === e._id ? (
+                    <tr key={e._id}>
+                      <td>
+                        <select className="select" value={editForm.category}
+                          onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}>
+                          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input className="input" value={editForm.description}
+                          onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })} />
+                      </td>
+                      <td>
+                        <input className="input" type="number" min={0} value={editForm.amount}
+                          onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })} style={{ width: 80 }} />
+                      </td>
+                      <td>{e.loggedBy?.name ?? '—'}</td>
+                      <td style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                        {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            onClick={() => handleEditSave(e._id)} disabled={editSaving}>
+                            <RiCheckLine />
+                          </button>
+                          <button className="btn secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            onClick={cancelEdit}>
+                            <RiCloseLine />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={e._id}>
+                      <td><span className="pill muted">{e.category}</span></td>
+                      <td>{e.description}</td>
+                      <td>Fr {e.amount.toLocaleString()}</td>
+                      <td>{e.loggedBy?.name ?? '—'}</td>
+                      <td style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                        {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td>
+                        {canEdit(e) && (
+                          <button className="btn secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                            onClick={() => startEdit(e)} title="Edit">
+                            <RiEditLine />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
                 ))}
               </tbody>
             </table>
