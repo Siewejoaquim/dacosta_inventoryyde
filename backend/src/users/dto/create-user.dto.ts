@@ -1,6 +1,4 @@
 import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { UserRole } from '../../common/enums/role.enum';
-import { UserStatus } from '../../common/enums/user-status.enum';
 
 export class CreateUserDto {
   @IsString()
@@ -16,11 +14,11 @@ export class CreateUserDto {
   @MaxLength(128)
   password!: string;
 
-  @IsEnum(UserRole)
-  role!: UserRole;
+  @IsEnum(['ADMIN', 'STAFF'])
+  role!: 'ADMIN' | 'STAFF';
 
   @IsOptional()
-  @IsEnum(UserStatus)
-  status?: UserStatus;
+  @IsEnum(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 

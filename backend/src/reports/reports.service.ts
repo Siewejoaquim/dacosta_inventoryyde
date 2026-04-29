@@ -5,6 +5,80 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async buildReport(from: Date, to: Date) {
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+
+    const [salesResult, expensesResult, invoicesByStatus, topProducts, lowStock] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        where: { dateCreated: { gte: from, lte: end }, status: { not: 'VOID' } },
+        _sum: { totalAmount: true },
+        _count: true,
+      }),
+      this.prisma.expense.aggregate({
+        where: { date: { gte: from, lte: end } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['status'],
+        where: { dateCreated: { gte: from, lte: end } },
+        _count: true,
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.invoiceItem.groupBy({
+        by: ['productName'],
+        where: { invoice: { dateCreated: { gte: from, lte: end }, status: { not: 'VOID' } } },
+        _sum: { quantity: true, totalPrice: true },
+        orderBy: { _sum: { totalPrice: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.product.findMany({
+        where: {
+          isArchived: false,
+          quantityInStock: { lt: this.prisma.product.fields.reorderPoint as any },
+        },
+        select: { productName: true, quantityInStock: true, reorderPoint: true },
+        take: 10,
+      }),
+    ]);
+
+    const totalSales = salesResult._sum.totalAmount ?? 0;
+    const totalExpenses = expensesResult._sum.amount ?? 0;
+
+    return {
+      from,
+      to: end,
+      totalSales,
+      totalExpenses,
+      netProfit: totalSales - totalExpenses,
+      invoiceCount: salesResult._count,
+      expenseCount: expensesResult._count,
+      invoicesByStatus,
+      topProducts,
+      lowStock,
+    };
+  }
+
+  async getWeeklyReport(refDate: Date = new Date()) {
+    const from = new Date(refDate);
+    from.setDate(from.getDate() - from.getDay()); // start of week (Sunday)
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 6);
+    return this.buildReport(from, to);
+  }
+
+  async getMonthlyReport(refDate: Date = new Date()) {
+    const from = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+    const to = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+    return this.buildReport(from, to);
+  }
+
+  async getCustomReport(from: Date, to: Date) {
+    return this.buildReport(from, to);
+  }
+
   async getDashboard() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -13,7 +87,6 @@ export class ReportsService {
 
     const [
       totalProducts,
-      lowStockProducts,
       todaySales,
       todayExpenses,
       pendingInvoices,
@@ -21,11 +94,8 @@ export class ReportsService {
       recentInvoices,
     ] = await Promise.all([
       this.prisma.product.count({ where: { isArchived: false } }),
-      this.prisma.product.count({
-        where: { isArchived: false, quantityInStock: { lt: this.prisma.product.fields.reorderPoint as any } },
-      }),
       this.prisma.invoice.aggregate({
-        where: { dateCreated: { gte: today, lt: tomorrow } },
+        where: { dateCreated: { gte: today, lt: tomorrow }, status: { not: 'VOID' } },
         _sum: { totalAmount: true },
       }),
       this.prisma.expense.aggregate({
@@ -48,50 +118,6 @@ export class ReportsService {
       pendingInvoices,
       pendingRequests,
       recentInvoices,
-    };
-  }
-
-  async getSummary(from: Date, to: Date) {
-    const endDate = new Date(to);
-    endDate.setHours(23, 59, 59, 999);
-
-    const [salesResult, expensesResult, invoicesByStatus, topProducts] = await Promise.all([
-      this.prisma.invoice.aggregate({
-        where: { dateCreated: { gte: from, lte: endDate }, status: { not: 'VOID' } },
-        _sum: { totalAmount: true },
-        _count: true,
-      }),
-      this.prisma.expense.aggregate({
-        where: { date: { gte: from, lte: endDate } },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.invoice.groupBy({
-        by: ['status'],
-        where: { dateCreated: { gte: from, lte: endDate } },
-        _count: true,
-        _sum: { totalAmount: true },
-      }),
-      this.prisma.invoiceItem.groupBy({
-        by: ['productName'],
-        where: { invoice: { dateCreated: { gte: from, lte: endDate }, status: { not: 'VOID' } } },
-        _sum: { quantity: true, totalPrice: true },
-        orderBy: { _sum: { totalPrice: 'desc' } },
-        take: 5,
-      }),
-    ]);
-
-    const totalSales = salesResult._sum.totalAmount ?? 0;
-    const totalExpenses = expensesResult._sum.amount ?? 0;
-
-    return {
-      totalSales,
-      totalExpenses,
-      netProfit: totalSales - totalExpenses,
-      invoiceCount: salesResult._count,
-      expenseCount: expensesResult._count,
-      invoicesByStatus,
-      topProducts,
     };
   }
 }

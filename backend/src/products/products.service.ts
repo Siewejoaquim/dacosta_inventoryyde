@@ -11,12 +11,12 @@ export class ProductsService {
     return this.prisma.product.create({ data: dto });
   }
 
-  async findAll(search?: string, category?: string, includeArchived?: boolean) {
+  async findAll(opts?: { search?: string; category?: string; includeArchived?: boolean }) {
     return this.prisma.product.findMany({
       where: {
-        isArchived: includeArchived ? undefined : false,
-        ...(search ? { productName: { contains: search, mode: 'insensitive' } } : {}),
-        ...(category ? { category } : {}),
+        isArchived: opts?.includeArchived ? undefined : false,
+        ...(opts?.search ? { productName: { contains: opts.search, mode: 'insensitive' as const } } : {}),
+        ...(opts?.category ? { category: opts.category } : {}),
       },
       orderBy: { productName: 'asc' },
     });
@@ -36,7 +36,8 @@ export class ProductsService {
     }
   }
 
-  async archive(id: string) {
+  // archive (soft delete)
+  async remove(id: string) {
     try {
       return await this.prisma.product.update({ where: { id }, data: { isArchived: true } });
     } catch {
@@ -59,6 +60,29 @@ export class ProductsService {
       where: { isArchived: false },
     });
     return products.map((p) => p.category).filter(Boolean);
+  }
+
+  async findDeadStock(days: number = 30) {
+    // Products with no invoice items in the last N days
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const activeProductIds = await this.prisma.invoiceItem.findMany({
+      where: { invoice: { dateCreated: { gte: since } } },
+      select: { productId: true },
+      distinct: ['productId'],
+    });
+
+    const activeIds = activeProductIds.map((p) => p.productId).filter(Boolean) as string[];
+
+    return this.prisma.product.findMany({
+      where: {
+        isArchived: false,
+        id: { notIn: activeIds },
+        quantityInStock: { gt: 0 },
+      },
+      orderBy: { productName: 'asc' },
+    });
   }
 
   async decreaseStock(id: string, quantity: number) {

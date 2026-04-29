@@ -41,17 +41,12 @@ export class StockService {
       data: { quantityInStock: quantity },
     });
     return this.prisma.stockHistory.create({
-      data: {
-        productId,
-        action: 'ADJUSTMENT',
-        quantity,
-        note,
-        performedById: userId,
-      },
+      data: { productId, action: 'ADJUSTMENT', quantity, note, performedById: userId },
     });
   }
 
-  async getHistory(productId?: string) {
+  // Called by stock controller
+  async findHistory(productId?: string) {
     return this.prisma.stockHistory.findMany({
       where: productId ? { productId } : undefined,
       include: {
@@ -61,5 +56,10 @@ export class StockService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+  }
+
+  // Alias used by stock controller
+  async getHistory(productId?: string) {
+    return this.findHistory(productId);
   }
 }
