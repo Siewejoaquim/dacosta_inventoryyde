@@ -1,47 +1,65 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
-import { StockHistory } from './schemas/stock-history.schema';
 
 @Injectable()
 export class StockService {
   constructor(
-    @InjectModel(StockHistory.name)
-    private readonly stockHistoryModel: Model<StockHistory>,
+    private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
   ) {}
 
-  async increaseStock(productId: string, quantity: number, userId: string) {
-    const product = await this.productsService.increaseStock(productId, quantity);
-    await this.stockHistoryModel.create({
-      productId: new Types.ObjectId(productId),
-      changeType: 'IN',
-      quantityChanged: quantity,
-      userId: new Types.ObjectId(userId),
-    });
-    return product;
-  }
-
   async decreaseStock(productId: string, quantity: number, userId: string) {
-    const product = await this.productsService.decreaseStock(productId, quantity);
-    await this.stockHistoryModel.create({
-      productId: new Types.ObjectId(productId),
-      changeType: 'OUT',
-      quantityChanged: quantity,
-      userId: new Types.ObjectId(userId),
+    await this.productsService.decreaseStock(productId, quantity);
+    return this.prisma.stockHistory.create({
+      data: {
+        productId,
+        action: 'DECREASE',
+        quantity,
+        note: `Sold ${quantity} unit(s)`,
+        performedById: userId,
+      },
     });
-    return product;
   }
 
-  async findHistory() {
-    return this.stockHistoryModel
-      .find()
-      .populate('productId', 'productName')
-      .populate('userId', 'name username')
-      .sort({ date: -1 })
-      .limit(100)
-      .exec();
+  async increaseStock(productId: string, quantity: number, userId: string) {
+    await this.productsService.increaseStock(productId, quantity);
+    return this.prisma.stockHistory.create({
+      data: {
+        productId,
+        action: 'INCREASE',
+        quantity,
+        note: `Restocked ${quantity} unit(s)`,
+        performedById: userId,
+      },
+    });
+  }
+
+  async adjust(productId: string, quantity: number, note: string, userId: string) {
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { quantityInStock: quantity },
+    });
+    return this.prisma.stockHistory.create({
+      data: {
+        productId,
+        action: 'ADJUSTMENT',
+        quantity,
+        note,
+        performedById: userId,
+      },
+    });
+  }
+
+  async getHistory(productId?: string) {
+    return this.prisma.stockHistory.findMany({
+      where: productId ? { productId } : undefined,
+      include: {
+        product: { select: { productName: true } },
+        performedBy: { select: { name: true, username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
   }
 }
-

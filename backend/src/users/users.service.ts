@@ -1,78 +1,69 @@
 import { Injectable, NotFoundException, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User } from './schemas/user.schema';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private readonly userModel: Model<User>) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(dto: CreateUserDto) {
+    const existing = await this.prisma.user.findUnique({ where: { username: dto.username } });
+    if (existing) throw new ConflictException('Username already exists');
+
     try {
-      // Check if username already exists
-      const existingUser = await this.userModel.findOne({ username: createUserDto.username }).exec();
-      if (existingUser) {
-        throw new ConflictException('Username already exists');
-      }
-
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-      const created = new this.userModel({
-        ...createUserDto,
-        password: hashedPassword,
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
+      const user = await this.prisma.user.create({
+        data: { ...dto, password: hashedPassword },
       });
-      return await created.save();
+      const { password, ...result } = user;
+      return result;
     } catch (error: any) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      if (error?.code === 11000) {
-        throw new ConflictException('Username already exists');
-      }
+      if (error?.code === 'P2002') throw new ConflictException('Username already exists');
       throw new BadRequestException('Failed to create user: ' + (error?.message || 'Unknown error'));
     }
   }
 
-  async findAll(): Promise<User[]> {
-    return this.userModel.find().select('-password').exec();
+  async findAll() {
+    return this.prisma.user.findMany({
+      select: { id: true, name: true, username: true, role: true, status: true, createdAt: true },
+    });
   }
 
-  async findById(id: string): Promise<User> {
-    const user = await this.userModel.findById(id).exec();
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+  async findById(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  async findByUsername(username: string): Promise<User | null> {
-    return this.userModel.findOne({ username }).exec();
+  async findByUsername(username: string) {
+    return this.prisma.user.findUnique({ where: { username } });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    const update: Partial<UpdateUserDto> = { ...updateUserDto };
-    if (updateUserDto.password) {
-      update.password = await bcrypt.hash(updateUserDto.password, 10);
+  async update(id: string, dto: UpdateUserDto) {
+    const data: any = { ...dto };
+    if (dto.password) {
+      data.password = await bcrypt.hash(dto.password, 10);
     }
-    const user = await this.userModel
-      .findByIdAndUpdate(id, update, { new: true })
-      .exec();
-    if (!user) {
+    try {
+      const user = await this.prisma.user.update({ where: { id }, data });
+      const { password, ...result } = user;
+      return result;
+    } catch {
       throw new NotFoundException('User not found');
     }
-    return user;
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ message: string }> {
-    const user = await this.userModel.findById(userId).exec();
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) throw new UnauthorizedException('Current password is incorrect');
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: await bcrypt.hash(newPassword, 10) },
+    });
     return { message: 'Password updated successfully' };
   }
 }
-

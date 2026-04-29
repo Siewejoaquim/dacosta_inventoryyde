@@ -1,158 +1,97 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Invoice } from '../invoices/schemas/invoice.schema';
-import { Product } from '../products/schemas/product.schema';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(
-    @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
-    @InjectModel(Product.name) private readonly productModel: Model<Product>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  private getWeekRange(referenceDate: Date) {
-    const date = new Date(referenceDate);
-    const day = date.getDay();
-    const diffToMonday = (day + 6) % 7;
-    const start = new Date(date);
-    start.setDate(date.getDate() - diffToMonday);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+  async getDashboard() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [
+      totalProducts,
+      lowStockProducts,
+      todaySales,
+      todayExpenses,
+      pendingInvoices,
+      pendingRequests,
+      recentInvoices,
+    ] = await Promise.all([
+      this.prisma.product.count({ where: { isArchived: false } }),
+      this.prisma.product.count({
+        where: { isArchived: false, quantityInStock: { lt: this.prisma.product.fields.reorderPoint as any } },
+      }),
+      this.prisma.invoice.aggregate({
+        where: { dateCreated: { gte: today, lt: tomorrow } },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.expense.aggregate({
+        where: { date: { gte: today, lt: tomorrow } },
+        _sum: { amount: true },
+      }),
+      this.prisma.invoice.count({ where: { status: { in: ['UNPAID', 'PARTIAL'] } } }),
+      this.prisma.productRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.invoice.findMany({
+        take: 5,
+        orderBy: { dateCreated: 'desc' },
+        include: { createdBy: { select: { name: true } } },
+      }),
+    ]);
+
+    return {
+      totalProducts,
+      todaySales: todaySales._sum.totalAmount ?? 0,
+      todayExpenses: todayExpenses._sum.amount ?? 0,
+      pendingInvoices,
+      pendingRequests,
+      recentInvoices,
+    };
   }
 
-  private getMonthRange(referenceDate: Date) {
-    const date = new Date(referenceDate);
-    const start = new Date(date.getFullYear(), date.getMonth(), 1);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  }
+  async getSummary(from: Date, to: Date) {
+    const endDate = new Date(to);
+    endDate.setHours(23, 59, 59, 999);
 
-  async getWeeklyReport(referenceDate: Date) {
-    const { start, end } = this.getWeekRange(referenceDate);
-    const invoices = await this.invoiceModel
-      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
-      .exec();
+    const [salesResult, expensesResult, invoicesByStatus, topProducts] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        where: { dateCreated: { gte: from, lte: endDate }, status: { not: 'VOID' } },
+        _sum: { totalAmount: true },
+        _count: true,
+      }),
+      this.prisma.expense.aggregate({
+        where: { date: { gte: from, lte: endDate } },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.invoice.groupBy({
+        by: ['status'],
+        where: { dateCreated: { gte: from, lte: endDate } },
+        _count: true,
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.invoiceItem.groupBy({
+        by: ['productName'],
+        where: { invoice: { dateCreated: { gte: from, lte: endDate }, status: { not: 'VOID' } } },
+        _sum: { quantity: true, totalPrice: true },
+        orderBy: { _sum: { totalPrice: 'desc' } },
+        take: 5,
+      }),
+    ]);
 
-    const totalSales = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-    const numberOfInvoices = invoices.length;
-
-    const productCounts: Record<string, { name: string; quantity: number }> = {};
-    invoices.forEach((inv) => {
-      inv.itemsPurchased.forEach((item) => {
-        if (!productCounts[item.productId.toString()]) {
-          productCounts[item.productId.toString()] = {
-            name: item.productName,
-            quantity: 0,
-          };
-        }
-        productCounts[item.productId.toString()].quantity += item.quantity;
-      });
-    });
-
-    const topSellingProducts = Object.values(productCounts)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
-
-    const lowStockProducts = await this.productModel
-      .find({
-        $expr: { $lt: ['$quantityInStock', '$reorderPoint'] },
-        isArchived: { $ne: true },
-      })
-      .exec();
+    const totalSales = salesResult._sum.totalAmount ?? 0;
+    const totalExpenses = expensesResult._sum.amount ?? 0;
 
     return {
       totalSales,
-      numberOfInvoices,
-      topSellingProducts,
-      lowStockProducts,
-      start,
-      end,
-    };
-  }
-
-  async getMonthlyReport(referenceDate: Date) {
-    const { start, end } = this.getMonthRange(referenceDate);
-    const invoices = await this.invoiceModel
-      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
-      .exec();
-
-    const totalMonthlyRevenue = invoices.reduce(
-      (sum, inv) => sum + inv.totalAmount,
-      0,
-    );
-
-    let totalProductsSold = 0;
-    const productCounts: Record<string, { name: string; quantity: number }> = {};
-    invoices.forEach((inv) => {
-      inv.itemsPurchased.forEach((item) => {
-        totalProductsSold += item.quantity;
-        if (!productCounts[item.productId.toString()]) {
-          productCounts[item.productId.toString()] = {
-            name: item.productName,
-            quantity: 0,
-          };
-        }
-        productCounts[item.productId.toString()].quantity += item.quantity;
-      });
-    });
-
-    const bestSellingProducts = Object.values(productCounts)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
-
-    const inventoryStatus = await this.productModel
-      .find({ isArchived: { $ne: true } })
-      .select('productName quantityInStock category reorderPoint')
-      .exec();
-
-    return {
-      totalMonthlyRevenue,
-      totalProductsSold,
-      bestSellingProducts,
-      inventoryStatus,
-      start,
-      end,
-    };
-  }
-
-  async getCustomReport(start: Date, end: Date) {
-    const invoices = await this.invoiceModel
-      .find({ dateCreated: { $gte: start, $lte: end }, status: { $ne: 'VOID' } })
-      .exec();
-
-    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-    let totalProductsSold = 0;
-    const productCounts: Record<string, { name: string; quantity: number; revenue: number }> = {};
-
-    invoices.forEach((inv) => {
-      inv.itemsPurchased.forEach((item) => {
-        totalProductsSold += item.quantity;
-        if (!productCounts[item.productId.toString()]) {
-          productCounts[item.productId.toString()] = { name: item.productName, quantity: 0, revenue: 0 };
-        }
-        productCounts[item.productId.toString()].quantity += item.quantity;
-        productCounts[item.productId.toString()].revenue += item.totalPrice;
-      });
-    });
-
-    const topProducts = Object.values(productCounts)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 10);
-
-    return {
-      totalRevenue,
-      totalProductsSold,
-      numberOfInvoices: invoices.length,
+      totalExpenses,
+      netProfit: totalSales - totalExpenses,
+      invoiceCount: salesResult._count,
+      expenseCount: expensesResult._count,
+      invoicesByStatus,
       topProducts,
-      start,
-      end,
     };
   }
 }
-

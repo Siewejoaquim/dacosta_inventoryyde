@@ -1,44 +1,36 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Invoice } from './schemas/invoice.schema';
-import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { ProductsService } from '../products/products.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { StockService } from '../stock/stock.service';
-import { UserRole } from '../common/enums/role.enum';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
 
 @Injectable()
 export class InvoicesService {
   constructor(
-    @InjectModel(Invoice.name) private readonly invoiceModel: Model<Invoice>,
-    private readonly productsService: ProductsService,
+    private readonly prisma: PrismaService,
     private readonly stockService: StockService,
   ) {}
 
   private generateInvoiceNumber() {
     const now = new Date();
-    return `INV-${now.getFullYear()}${(now.getMonth() + 1)
-      .toString()
-      .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now
-      .getTime()
-      .toString()
-      .slice(-6)}`;
+    return `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getTime().toString().slice(-6)}`;
   }
 
-  async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
-    const itemsPurchased = [];
+  async create(dto: CreateInvoiceDto, userId: string) {
     let calculatedTotal = 0;
+    const itemsData = [];
 
     for (const item of dto.items) {
-      const product = await this.productsService.findById(item.productId);
+      const product = await this.prisma.product.findUnique({ where: { id: item.productId } });
+      if (!product) throw new NotFoundException(`Product ${item.productId} not found`);
+
       const unitPrice = item.unitPrice ?? product.sellingPrice;
       const totalPrice = unitPrice * item.quantity;
       calculatedTotal += totalPrice;
 
       await this.stockService.decreaseStock(item.productId, item.quantity, userId);
 
-      itemsPurchased.push({
-        productId: new Types.ObjectId(item.productId),
+      itemsData.push({
+        productId: item.productId,
         productName: item.productName ?? product.productName,
         quantity: item.quantity,
         unitPrice,
@@ -47,96 +39,93 @@ export class InvoicesService {
     }
 
     const amountPaid = dto.amountPaid ?? 0;
-    let status: string = dto.status ?? 'UNPAID';
-    // Auto-derive status from amountPaid if not explicitly set
+    let status = dto.status ?? 'UNPAID';
     if (!dto.status) {
       if (amountPaid <= 0) status = 'UNPAID';
       else if (amountPaid >= calculatedTotal) status = 'PAID';
       else status = 'PARTIAL';
     }
 
-    // For PARTIAL: totalAmount = amountPaid (discounted price), originalAmount = calculatedTotal
     const totalAmount = status === 'PARTIAL' ? amountPaid : calculatedTotal;
-    const originalAmount = status === 'PARTIAL' ? calculatedTotal : undefined;
+    const originalAmount = status === 'PARTIAL' ? calculatedTotal : null;
 
-    const created = new this.invoiceModel({
-      invoiceNumber: this.generateInvoiceNumber(),
-      customerName: dto.customerName,
-      customerPhone: dto.customerPhone,
-      itemsPurchased,
-      totalAmount,
-      originalAmount,
-      createdBy: new Types.ObjectId(userId),
-      status,
-      amountPaid,
+    return this.prisma.invoice.create({
+      data: {
+        invoiceNumber: this.generateInvoiceNumber(),
+        customerName: dto.customerName,
+        customerPhone: dto.customerPhone,
+        totalAmount,
+        originalAmount,
+        amountPaid,
+        status: status as any,
+        createdById: userId,
+        items: { create: itemsData },
+      },
+      include: {
+        createdBy: { select: { name: true, username: true } },
+        items: true,
+      },
     });
-    return created.save();
   }
 
-  async updatePayment(id: string, amountPaid: number, userId: string, userRole: string): Promise<Invoice> {
-    const invoice = await this.findById(id, userId, userRole);
-    if (invoice.status === 'VOID') {
-      throw new BadRequestException('Cannot update payment on a voided invoice');
-    }
-    let status: string;
-    if (amountPaid <= 0) {
-      status = 'UNPAID';
-    } else if (amountPaid >= invoice.totalAmount) {
-      status = 'PAID';
-    } else {
-      status = 'PARTIAL';
-    }
-    const updated = await this.invoiceModel.findByIdAndUpdate(
-      id,
-      { amountPaid, status },
-      { new: true },
-    ).populate('createdBy', 'name username').exec();
-    return updated!;
+  async findAll(userId?: string, userRole?: string) {
+    return this.prisma.invoice.findMany({
+      where: userRole === 'STAFF' && userId ? { createdById: userId } : undefined,
+      include: {
+        createdBy: { select: { id: true, name: true, username: true } },
+        items: true,
+      },
+      orderBy: { dateCreated: 'desc' },
+      take: 100,
+    });
   }
 
-  async voidInvoice(id: string, userId: string, userRole: string): Promise<Invoice> {
-    const invoice = await this.findById(id, userId, userRole);
-    if (invoice.status === 'VOID') {
-      throw new BadRequestException('Invoice is already voided');
-    }
-    // Restore stock for each item
-    for (const item of invoice.itemsPurchased) {
-      await this.stockService.increaseStock(item.productId.toString(), item.quantity, userId);
-    }
-    const updated = await this.invoiceModel.findByIdAndUpdate(
-      id,
-      { status: 'VOID', voidedAt: new Date(), voidedBy: new Types.ObjectId(userId) },
-      { new: true },
-    ).populate('createdBy', 'name username').exec();
-    return updated!;
-  }
-
-  async findAll(userId?: string): Promise<Invoice[]> {
-    const query: any = {};
-    if (userId) {
-      query.createdBy = new Types.ObjectId(userId);
-    }
-    return this.invoiceModel
-      .find(query)
-      .populate('createdBy', 'name username')
-      .sort({ dateCreated: -1 })
-      .limit(100)
-      .exec();
-  }
-
-  async findById(id: string, userId?: string, userRole?: string): Promise<Invoice> {
-    const invoice = await this.invoiceModel
-      .findById(id)
-      .populate('createdBy', 'name username')
-      .exec();
-    if (!invoice) {
-      throw new NotFoundException('Invoice not found');
-    }
-    // Staff can only see their own invoices
-    if (userRole === UserRole.STAFF && userId && invoice.createdBy.toString() !== userId) {
+  async findById(id: string, userId?: string, userRole?: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { id: true, name: true, username: true } },
+        items: { include: { product: { select: { productName: true } } } },
+      },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (userRole === 'STAFF' && userId && invoice.createdById !== userId) {
       throw new ForbiddenException('You can only view your own invoices');
     }
     return invoice;
+  }
+
+  async updatePayment(id: string, amountPaid: number, userId: string, userRole: string) {
+    const invoice = await this.findById(id, userId, userRole);
+    if (invoice.status === 'VOID') throw new BadRequestException('Cannot update a voided invoice');
+
+    let status: string;
+    if (amountPaid <= 0) status = 'UNPAID';
+    else if (amountPaid >= invoice.totalAmount) status = 'PAID';
+    else status = 'PARTIAL';
+
+    return this.prisma.invoice.update({
+      where: { id },
+      data: { amountPaid, status: status as any },
+      include: { createdBy: { select: { name: true, username: true } }, items: true },
+    });
+  }
+
+  async voidInvoice(id: string, userId: string, userRole: string) {
+    const invoice = await this.findById(id, userId, userRole);
+    if (invoice.status === 'VOID') throw new BadRequestException('Invoice is already voided');
+
+    for (const item of invoice.items) {
+      if (item.productId) {
+        await this.stockService.increaseStock(item.productId, item.quantity, userId);
+      }
+    }
+
+    return this.prisma.invoice.update({
+      where: { id },
+      data: { status: 'VOID', voidedAt: new Date(), voidedById: userId },
+      include: { createdBy: { select: { name: true, username: true } }, items: true },
+    });
   }
 
   async totalSalesOn(date: Date): Promise<number> {
@@ -144,11 +133,10 @@ export class InvoicesService {
     start.setHours(0, 0, 0, 0);
     const end = new Date(date);
     end.setHours(23, 59, 59, 999);
-    const result = await this.invoiceModel.aggregate([
-      { $match: { dateCreated: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-    ]);
-    return result[0]?.total ?? 0;
+    const result = await this.prisma.invoice.aggregate({
+      where: { dateCreated: { gte: start, lte: end } },
+      _sum: { totalAmount: true },
+    });
+    return result._sum.totalAmount ?? 0;
   }
 }
-
