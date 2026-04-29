@@ -27,9 +27,7 @@ export class InvoicesController {
   @Get()
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   findAll(@Req() req: any) {
-    const isAdmin = req.user.role === UserRole.ADMIN;
-    const userId = isAdmin ? undefined : req.user.userId;
-    return this.invoicesService.findAll(userId);
+    return this.invoicesService.findAll(req.user.userId, req.user.role);
   }
 
   @Get(':id')

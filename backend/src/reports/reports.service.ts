@@ -33,14 +33,14 @@ export class ReportsService {
         orderBy: { _sum: { totalPrice: 'desc' } },
         take: 5,
       }),
-      this.prisma.product.findMany({
-        where: {
-          isArchived: false,
-          quantityInStock: { lt: this.prisma.product.fields.reorderPoint as any },
-        },
-        select: { productName: true, quantityInStock: true, reorderPoint: true },
-        take: 10,
-      }),
+      this.prisma.$queryRaw<{ productName: string; quantityInStock: number; reorderPoint: number }[]>`
+        SELECT "productName", "quantityInStock", "reorderPoint"
+        FROM "Product"
+        WHERE "isArchived" = false
+          AND "quantityInStock" <= "reorderPoint"
+        ORDER BY "quantityInStock" ASC
+        LIMIT 10
+      `,
     ]);
 
     const totalSales = salesResult._sum.totalAmount ?? 0;

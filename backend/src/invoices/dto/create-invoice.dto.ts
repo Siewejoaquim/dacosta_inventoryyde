@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
@@ -11,20 +10,22 @@ import {
 import { Type } from 'class-transformer';
 
 class InvoiceItemInput {
-  @IsMongoId()
+  @IsString()
   productId!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(200)
-  productName!: string;
+  productName?: string;
 
   @IsNumber()
   @Min(1)
   quantity!: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  unitPrice!: number;
+  unitPrice?: number;
 }
 
 export class CreateInvoiceDto {
@@ -51,4 +52,3 @@ export class CreateInvoiceDto {
   @Type(() => InvoiceItemInput)
   items!: InvoiceItemInput[];
 }
-
