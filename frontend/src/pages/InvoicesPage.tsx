@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { decodeToken, UserInfo } from '../api/auth';
 import api from '../api/client';
-import { RiCloseLine, RiAddLine } from 'react-icons/ri';
+import { RiCloseLine, RiAddLine, RiPrinterLine } from 'react-icons/ri';
 import { useToast } from '../components/Toast';
+import { printInvoice } from '../utils/printInvoice';
 
 interface InvoiceItem {
   productId: string;
@@ -163,8 +164,26 @@ export const InvoicesPage: React.FC = () => {
         })),
       };
 
-      await api.post('/invoices', payload);
+      const response = await api.post('/invoices', payload);
       toast.success('Invoice created successfully');
+
+      // Print the invoice in DaCosta format
+      printInvoice({
+        invoiceNumber: response.data.invoiceNumber,
+        customerName,
+        customerPhone,
+        dateCreated: response.data.dateCreated || new Date().toISOString(),
+        items: items.map((it) => ({
+          productName: products.find((p) => p._id === it.productId)?.productName ?? '',
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          totalPrice: it.quantity * it.unitPrice,
+        })),
+        totalAmount: actualTotal,
+        originalAmount: hasPartialItems ? originalTotal : undefined,
+        amountPaid: hasPartialItems ? actualTotal : undefined,
+        status: finalStatus,
+      });
       
       resetForm();
       setShowCreatePanel(false);
@@ -252,9 +271,31 @@ export const InvoicesPage: React.FC = () => {
                     {isAdmin && <td>{inv.createdBy?.name}</td>}
                     <td>{new Date(inv.dateCreated).toLocaleDateString()}</td>
                     <td>
-                      <Link to={`/invoices/${inv._id}`} style={{ color: '#2563eb', fontSize: '0.8rem' }}>
+                      <Link to={`/invoices/${inv._id}`} style={{ color: '#2563eb', fontSize: '0.8rem', marginRight: '0.75rem' }}>
                         View
                       </Link>
+                      <button
+                        onClick={() => printInvoice({
+                          invoiceNumber: inv.invoiceNumber,
+                          customerName: inv.customerName,
+                          customerPhone: inv.customerPhone,
+                          dateCreated: inv.dateCreated,
+                          items: (inv.itemsPurchased || inv.items || []).map((it: any) => ({
+                            productName: it.productName,
+                            quantity: it.quantity,
+                            unitPrice: it.unitPrice,
+                            totalPrice: it.totalPrice,
+                          })),
+                          totalAmount: inv.totalAmount,
+                          originalAmount: inv.originalAmount,
+                          amountPaid: inv.amountPaid,
+                          status: inv.status,
+                        })}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 0 }}
+                        title="Print invoice"
+                      >
+                        <RiPrinterLine size={15} />
+                      </button>
                     </td>
                   </tr>
                 );

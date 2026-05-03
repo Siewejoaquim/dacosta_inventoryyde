@@ -4,6 +4,7 @@ import api from '../api/client';
 import { decodeToken } from '../api/auth';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ConfirmModal';
+import { printInvoice } from '../utils/printInvoice';
 
 export const InvoiceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -65,38 +66,22 @@ export const InvoiceDetailPage: React.FC = () => {
 
   const handlePrint = () => {
     if (!invoice) return;
-    const win = window.open('', '', 'width=800,height=600');
-    if (!win) return;
-    const paid = invoice.amountPaid ?? 0;
-    const isPartial = invoice.status === 'PARTIAL';
-    const originalAmt = (invoice as any).originalAmount;
-    const paymentLine = invoice.status === 'PAID'
-      ? `<p style="text-align:right;color:#15803d;font-weight:bold">PAID IN FULL</p>`
-      : isPartial && originalAmt
-      ? `<p style="text-align:right;text-decoration:line-through;color:#999">Original Price: Fr ${originalAmt.toLocaleString()}</p>
-         <p style="text-align:right;color:#15803d;font-weight:bold">Discounted Price: Fr ${invoice.totalAmount.toLocaleString()}</p>`
-      : `<p style="text-align:right;color:#b91c1c;font-weight:bold">UNPAID — Balance Due: Fr ${invoice.totalAmount.toLocaleString()}</p>`;
-    win.document.write(`<!DOCTYPE html><html><head><title>${invoice.invoiceNumber}</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}
-      .total-block{border-top:2px solid #000;border-bottom:2px solid #000;padding:12px 0;margin-top:12px}</style></head>
-      <body>
-        <h2 style="text-align:center">DACOSTA ALL MOTORS</h2>
-        <p style="text-align:center;color:#666">INVOICE</p>
-        <p><strong>Invoice:</strong> ${invoice.invoiceNumber}</p>
-        <p><strong>Customer:</strong> ${invoice.customerName}${invoice.customerPhone ? ' | ' + invoice.customerPhone : ''}</p>
-        <p><strong>Date:</strong> ${new Date(invoice.dateCreated).toLocaleString()}</p>
-        <table><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
-        <tbody>${invoice.itemsPurchased.map((it: any) =>
-          `<tr><td>${it.productName}</td><td>${it.quantity}</td><td>Fr ${it.unitPrice.toLocaleString()}</td><td>Fr ${it.totalPrice.toLocaleString()}</td></tr>`
-        ).join('')}</tbody></table>
-        <div class="total-block">
-          <p style="text-align:right;font-size:1.1rem"><strong>Total Amount: Fr ${invoice.totalAmount.toLocaleString()}</strong></p>
-          ${paymentLine}
-        </div>
-      </body></html>`);
-    win.document.close();
-    win.print();
+    printInvoice({
+      invoiceNumber: invoice.invoiceNumber,
+      customerName: invoice.customerName,
+      customerPhone: invoice.customerPhone,
+      dateCreated: invoice.dateCreated,
+      items: (invoice.itemsPurchased || invoice.items || []).map((it: any) => ({
+        productName: it.productName,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        totalPrice: it.totalPrice,
+      })),
+      totalAmount: invoice.totalAmount,
+      originalAmount: invoice.originalAmount,
+      amountPaid: invoice.amountPaid,
+      status: invoice.status,
+    });
   };
 
   if (loading) return <div>Loading...</div>;
