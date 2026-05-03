@@ -11,9 +11,10 @@ async function bootstrap() {
   console.log('JWT_SECRET set:', !!process.env.JWT_SECRET);
   console.log('PORT:', process.env.PORT || 4000);
 
+  // Temporary: use hardcoded DATABASE_URL if env var not set (REMOVE AFTER FIXING RAILWAY)
   if (!process.env.DATABASE_URL) {
-    console.error('FATAL: DATABASE_URL environment variable is not set!');
-    process.exit(1);
+    console.warn('DATABASE_URL not in env, using hardcoded value for debugging');
+    process.env.DATABASE_URL = 'postgresql://postgres:zoLDBsGDhcxKJrLoNRqZLMnwzbYXsuzz@postgres.railway.internal:5432/dacosta_db';
   }
 
   // JWT_SECRET fallback for debugging only
