@@ -168,7 +168,7 @@ export const InvoicesPage: React.FC = () => {
       toast.success('Invoice created successfully');
 
       // Print the invoice in DaCosta format
-      printInvoice({
+      await printInvoice({
         invoiceNumber: response.data.invoiceNumber,
         customerName,
         customerPhone,
@@ -275,7 +275,7 @@ export const InvoicesPage: React.FC = () => {
                         View
                       </Link>
                       <button
-                        onClick={() => printInvoice({
+                        onClick={async () => printInvoice({
                           invoiceNumber: inv.invoiceNumber,
                           customerName: inv.customerName,
                           customerPhone: inv.customerPhone,

@@ -64,9 +64,9 @@ export const InvoiceDetailPage: React.FC = () => {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!invoice) return;
-    printInvoice({
+    await printInvoice({
       invoiceNumber: invoice.invoiceNumber,
       customerName: invoice.customerName,
       customerPhone: invoice.customerPhone,

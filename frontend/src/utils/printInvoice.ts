@@ -19,7 +19,23 @@ interface PrintInvoiceOptions {
   status: string;
 }
 
-export function printInvoice(data: PrintInvoiceOptions) {
+// Convert image URL to base64 for use in print window
+async function imageToBase64(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return ''; // fallback to no image
+  }
+}
+
+export async function printInvoice(data: PrintInvoiceOptions) {
   const date = new Date(data.dateCreated);
   const formattedDate = date.toLocaleDateString('fr-FR', {
     day: '2-digit',
@@ -27,362 +43,343 @@ export function printInvoice(data: PrintInvoiceOptions) {
     year: 'numeric',
   });
 
-  const amountInWords = numberToFrenchWords(data.totalAmount);
+  const amountInWords = numberToFrenchWords(Math.round(data.totalAmount));
 
-  const itemRows = data.items.map((item) => `
-    <tr>
-      <td style="padding: 8px 10px; border: 1px solid #ccc; font-size: 13px;">${item.productName}</td>
-      <td style="padding: 8px 10px; border: 1px solid #ccc; text-align: center; font-size: 13px;">${item.quantity}</td>
-      <td style="padding: 8px 10px; border: 1px solid #ccc; text-align: right; font-size: 13px;">${Math.round(item.unitPrice).toLocaleString('fr-FR')}</td>
-      <td style="padding: 8px 10px; border: 1px solid #ccc; text-align: right; font-size: 13px; font-weight: bold;">${Math.round(item.totalPrice).toLocaleString('fr-FR')}</td>
+  // Load logo as base64
+  const logoBase64 = await imageToBase64('/dacosta-logo.jpeg');
+
+  const itemRows = data.items.map((item, i) => `
+    <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+      <td style="padding:7px 10px;border:1px solid #ddd;font-size:12px;">${item.productName}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:center;font-size:12px;">${item.quantity}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:right;font-size:12px;">${Math.round(item.unitPrice).toLocaleString('fr-FR')}</td>
+      <td style="padding:7px 10px;border:1px solid #ddd;text-align:right;font-size:12px;font-weight:700;">${Math.round(item.totalPrice).toLocaleString('fr-FR')}</td>
     </tr>
   `).join('');
 
-  const html = `
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-      <meta charset="UTF-8" />
-      <title>Facture ${data.invoiceNumber}</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: Arial, sans-serif;
-          background: white;
-          color: #000;
-        }
-        .page {
-          width: 210mm;
-          min-height: 297mm;
-          margin: 0 auto;
-          padding: 0;
-          display: flex;
-          flex-direction: column;
-        }
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Facture ${data.invoiceNumber}</title>
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 210mm;
+      height: 297mm;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #fff;
+      color: #111;
+    }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
 
-        /* ── HEADER ── */
-        .header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px 20px;
-          border-bottom: 4px solid #cc0000;
-        }
-        .logo-section {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 160px;
-        }
-        .logo-box {
-          text-align: center;
-          line-height: 1;
-        }
-        .logo-car svg {
-          display: block;
-          margin: 0 auto 2px auto;
-        }
-        .logo-dacosta {
-          font-size: 24px;
-          font-weight: 900;
-          color: #111;
-          letter-spacing: 1px;
-          font-family: Arial Black, Arial, sans-serif;
-        }
-        .logo-autos {
-          font-size: 15px;
-          font-weight: 900;
-          color: #cc0000;
-          letter-spacing: 2px;
-          font-family: Arial Black, Arial, sans-serif;
-        }
-        .company-info {
-          text-align: center;
-          flex: 1;
-          padding: 0 20px;
-        }
-        .company-info h1 {
-          font-size: 36px;
-          font-weight: 900;
-          color: #cc0000;
-          letter-spacing: 2px;
-          font-family: Arial Black, Arial, sans-serif;
-        }
-        .company-info .brands {
-          font-size: 13px;
-          font-weight: 600;
-          color: #333;
-          margin-top: 4px;
-        }
+    /* ── TOP RED BAR ── */
+    .top-bar { height: 5px; background: #cc0000; }
 
-        /* ── BODY ── */
-        .body {
-          flex: 1;
-          padding: 20px 25px;
-        }
-        .date-line {
-          text-align: right;
-          font-size: 13px;
-          margin-bottom: 15px;
-          color: #333;
-        }
-        .invoice-title {
-          text-align: center;
-          font-size: 16px;
-          font-weight: 700;
-          text-decoration: underline;
-          margin-bottom: 20px;
-          letter-spacing: 1px;
-        }
-        .client-line {
-          font-size: 13px;
-          margin-bottom: 15px;
-        }
-        .client-line strong {
-          font-weight: 700;
-        }
+    /* ── HEADER ── */
+    .header {
+      display: flex;
+      align-items: center;
+      padding: 10px 22px;
+      border-bottom: 3px solid #cc0000;
+      gap: 0;
+    }
+    .logo-img {
+      width: 120px;
+      height: auto;
+      object-fit: contain;
+    }
+    .header-divider {
+      width: 2px;
+      height: 65px;
+      background: #ddd;
+      margin: 0 18px;
+    }
+    .company-block { flex: 1; text-align: center; }
+    .company-name {
+      font-size: 34px;
+      font-weight: 900;
+      color: #cc0000;
+      letter-spacing: 3px;
+      font-family: 'Arial Black', Arial, sans-serif;
+      line-height: 1;
+    }
+    .company-brands {
+      font-size: 11.5px;
+      color: #333;
+      font-weight: 600;
+      margin-top: 6px;
+      letter-spacing: 0.5px;
+    }
 
-        /* ── TABLE ── */
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 5px;
-        }
-        thead tr {
-          background: #f0f0f0;
-        }
-        thead th {
-          padding: 8px 10px;
-          border: 1px solid #ccc;
-          font-size: 13px;
-          font-weight: 700;
-          text-align: left;
-        }
-        thead th:nth-child(2),
-        thead th:nth-child(3),
-        thead th:nth-child(4) {
-          text-align: center;
-        }
-        .total-row td {
-          padding: 8px 10px;
-          border: 1px solid #ccc;
-          font-weight: 700;
-          font-size: 13px;
-        }
-        .total-row td:last-child {
-          text-align: right;
-        }
+    /* ── BODY ── */
+    .body {
+      flex: 1;
+      padding: 12px 22px 8px 22px;
+      display: flex;
+      flex-direction: column;
+    }
+    .date-text {
+      text-align: right;
+      font-size: 12px;
+      color: #444;
+      margin-bottom: 8px;
+    }
+    .invoice-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: underline;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    .client-line {
+      font-size: 12.5px;
+      margin-bottom: 10px;
+      padding: 5px 10px;
+      background: #f9f9f9;
+      border-left: 3px solid #cc0000;
+    }
 
-        /* ── AMOUNT IN WORDS ── */
-        .amount-words {
-          font-size: 12px;
-          margin: 15px 0 30px 0;
-          font-style: italic;
-        }
-        .amount-words strong {
-          font-style: normal;
-          font-weight: 700;
-        }
+    /* ── TABLE ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    thead tr { background: #1a1a1a; color: #fff; }
+    thead th {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: left;
+    }
+    thead th:nth-child(2) { text-align: center; }
+    thead th:nth-child(3),
+    thead th:nth-child(4) { text-align: right; }
+    .total-row td {
+      padding: 7px 10px;
+      border: 1px solid #ddd;
+      font-weight: 700;
+      font-size: 12.5px;
+      background: #f0f0f0;
+    }
+    .total-row td:last-child { text-align: right; color: #cc0000; }
 
-        /* ── STATUS BADGE ── */
-        .status-badge {
-          display: inline-block;
-          padding: 3px 10px;
-          border-radius: 4px;
-          font-size: 11px;
-          font-weight: 700;
-          margin-bottom: 20px;
-        }
+    /* ── AMOUNT WORDS ── */
+    .amount-words {
+      font-size: 11.5px;
+      font-style: italic;
+      margin: 8px 0 8px 0;
+      padding: 5px 10px;
+      border: 1px dashed #ccc;
+      background: #fafafa;
+    }
+    .amount-words strong { font-style: normal; font-weight: 700; }
 
-        /* ── SIGNATURE ── */
-        .signature-section {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 20px;
-          margin-bottom: 40px;
-          padding-right: 30px;
-        }
-        .signature-box {
-          text-align: center;
-          width: 180px;
-        }
-        .signature-box .title {
-          font-size: 13px;
-          font-weight: 700;
-          text-decoration: underline;
-          margin-bottom: 50px;
-        }
-        .signature-box .stamp-circle {
-          width: 100px;
-          height: 100px;
-          border: 2px solid #1a3a8f;
-          border-radius: 50%;
-          margin: 0 auto;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #1a3a8f;
-          font-size: 9px;
-          font-weight: 700;
-          text-align: center;
-          padding: 10px;
-          line-height: 1.3;
-        }
+    /* ── STATUS ── */
+    .status-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 3px;
+      margin-bottom: 6px;
+    }
 
-        /* ── FOOTER ── */
-        .footer {
-          background: #1a1a1a;
-          color: white;
-          padding: 12px 20px;
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 20px;
-          margin-top: auto;
-        }
-        .footer-col {
-          font-size: 11px;
-          line-height: 1.8;
-        }
-        .footer-col .label {
-          color: #ff4444;
-          font-weight: 700;
-        }
-        .footer-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 6px;
-          margin-bottom: 3px;
-        }
-        .footer-icon {
-          color: #ff4444;
-          font-size: 13px;
-          margin-top: 1px;
-          flex-shrink: 0;
-        }
+    /* ── SIGNATURE ── */
+    .sig-row {
+      display: flex;
+      justify-content: flex-end;
+      padding-right: 24px;
+      margin-top: 6px;
+      flex: 1;
+      align-items: flex-end;
+      padding-bottom: 10px;
+    }
+    .sig-box { text-align: center; width: 150px; }
+    .sig-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: underline;
+      margin-bottom: 38px;
+    }
+    .sig-stamp {
+      width: 88px;
+      height: 88px;
+      border: 2.5px solid #1a3a8f;
+      border-radius: 50%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1a3a8f;
+      font-size: 8.5px;
+      font-weight: 700;
+      text-align: center;
+      padding: 8px;
+      line-height: 1.5;
+    }
 
-        @media print {
-          body { margin: 0; }
-          .page { width: 100%; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="page">
+    /* ── FOOTER ── */
+    .footer {
+      background: #1a1a1a;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      border-top: 4px solid #cc0000;
+    }
+    .footer-col { font-size: 10.5px; line-height: 1.75; }
+    .footer-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      margin-bottom: 3px;
+    }
+    .f-icon { flex-shrink: 0; margin-top: 2px; }
+    .f-red { color: #ff5555; font-weight: 700; }
+    .footer-sep {
+      width: 1px;
+      background: rgba(255,255,255,0.12);
+      align-self: stretch;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
 
-        <!-- HEADER -->
-        <div class="header">
-          <div class="logo-section">
-            <div class="logo-box">
-              <div class="dacosta">DACOSTA</div>
-              <div class="autos">AUTOS</div>
-            </div>
-          </div>
-          <div class="company-info">
-            <h1>ETS DACOSTA</h1>
-            <div class="brands">IVECO MAN DIESEL, RENAULT, MERCEDES, TOYOTA</div>
-          </div>
-        </div>
+  <div class="top-bar"></div>
 
-        <!-- BODY -->
-        <div class="body">
-          <div class="date-line">Yaoundé, le ${formattedDate}</div>
+  <!-- HEADER -->
+  <div class="header">
+    ${logoBase64
+      ? `<img src="${logoBase64}" class="logo-img" alt="DaCosta Autos"/>`
+      : `<div style="text-align:center;min-width:120px">
+           <div style="font-size:22px;font-weight:900;color:#111;font-family:'Arial Black',Arial,sans-serif;">DACOSTA</div>
+           <div style="font-size:14px;font-weight:900;color:#cc0000;letter-spacing:3px;font-family:'Arial Black',Arial,sans-serif;">AUTOS</div>
+         </div>`
+    }
+    <div class="header-divider"></div>
+    <div class="company-block">
+      <div class="company-name">ETS DACOSTA</div>
+      <div class="company-brands">IVECO &nbsp;|&nbsp; MAN DIESEL &nbsp;|&nbsp; RENAULT &nbsp;|&nbsp; MERCEDES &nbsp;|&nbsp; TOYOTA</div>
+    </div>
+  </div>
 
-          <div class="invoice-title">FACTURE PROFOMA N° ${data.invoiceNumber}</div>
+  <!-- BODY -->
+  <div class="body">
+    <div class="date-text">Yaoundé, le ${formattedDate}</div>
 
-          <div class="client-line">
-            <strong>Doit :</strong> ${data.customerName}${data.customerPhone ? ' — ' + data.customerPhone : ''}
-          </div>
+    <div class="invoice-title">FACTURE PROFORMA N° ${data.invoiceNumber}</div>
 
-          <!-- ITEMS TABLE -->
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 55%;">Désignation</th>
-                <th style="width: 12%; text-align: center;">Quantités</th>
-                <th style="width: 16%; text-align: right;">Prix unitaire</th>
-                <th style="width: 17%; text-align: right;">Prix Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemRows}
-            </tbody>
-            <tfoot>
-              <tr class="total-row">
-                <td colspan="3" style="font-weight: 700; padding: 8px 10px; border: 1px solid #ccc;">Total</td>
-                <td style="text-align: right; padding: 8px 10px; border: 1px solid #ccc; font-weight: 700;">
-                  ${Math.round(data.totalAmount).toLocaleString('fr-FR')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+    <div class="client-line">
+      <strong>Doit&nbsp;:</strong>&nbsp;${data.customerName}${data.customerPhone ? '&nbsp;&nbsp;|&nbsp;&nbsp;' + data.customerPhone : ''}
+    </div>
 
-          <!-- AMOUNT IN WORDS -->
-          <div class="amount-words">
-            Arrêter la présente facture à la somme de <strong>${amountInWords}</strong>.
-          </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:52%">Désignation</th>
+          <th style="width:12%;text-align:center">Quantités</th>
+          <th style="width:18%;text-align:right">Prix unitaire</th>
+          <th style="width:18%;text-align:right">Prix Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="3">Total</td>
+          <td>${Math.round(data.totalAmount).toLocaleString('fr-FR')}</td>
+        </tr>
+      </tfoot>
+    </table>
 
-          ${data.status === 'PARTIAL' ? `
-          <div style="font-size: 12px; color: #854d0e; margin-bottom: 10px;">
-            ⚠️ Paiement partiel — Montant payé: <strong>${Math.round(data.amountPaid || 0).toLocaleString('fr-FR')} Fr</strong> 
-            sur <strong>${Math.round(data.originalAmount || data.totalAmount).toLocaleString('fr-FR')} Fr</strong>
-          </div>` : ''}
+    <div class="amount-words">
+      Arrêter la présente facture à la somme de <strong>${amountInWords}</strong>.
+    </div>
 
-          ${data.status === 'UNPAID' ? `
-          <div style="font-size: 12px; color: #b91c1c; margin-bottom: 10px;">
-            ⚠️ IMPAYÉ — Solde dû: <strong>${Math.round(data.totalAmount).toLocaleString('fr-FR')} Fr</strong>
-          </div>` : ''}
+    ${data.status === 'PARTIAL' ? `
+    <div class="status-badge" style="background:#fef3c7;color:#92400e;">
+      ⚠ Paiement partiel — Payé: ${Math.round(data.amountPaid || 0).toLocaleString('fr-FR')} Fr / Total initial: ${Math.round(data.originalAmount || data.totalAmount).toLocaleString('fr-FR')} Fr
+    </div>` : ''}
+    ${data.status === 'UNPAID' ? `
+    <div class="status-badge" style="background:#fee2e2;color:#991b1b;">
+      ✗ IMPAYÉ — Solde dû: ${Math.round(data.totalAmount).toLocaleString('fr-FR')} Fr
+    </div>` : ''}
+    ${data.status === 'PAID' ? `
+    <div class="status-badge" style="background:#dcfce7;color:#166534;">
+      ✓ PAYÉ INTÉGRALEMENT
+    </div>` : ''}
 
-          <!-- SIGNATURE -->
-          <div class="signature-section">
-            <div class="signature-box">
-              <div class="title">LA DIRECTION</div>
-              <div class="stamp-circle">
-                ETS DACOSTA<br/>AUTOS<br/>YAOUNDÉ<br/>CAMEROUN
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- FOOTER -->
-        <div class="footer">
-          <div class="footer-col">
-            <div class="footer-item">
-              <span class="footer-icon">📞</span>
-              <span>Tel: +237 673 99 79 50 / 658 98 84 87<br/>656 22 39 98</span>
-            </div>
-            <div class="footer-item">
-              <span class="footer-icon">✉️</span>
-              <span>geralddacosta2015@gmail.com</span>
-            </div>
-          </div>
-          <div class="footer-col">
-            <div class="footer-item">
-              <span class="footer-icon">📍</span>
-              <div>
-                Douala en face total Dobo BONABERI boutique N°836 Camp D<br/>
-                Yaoundé Mimboman liberté en face de beauty Magic
-              </div>
-            </div>
-          </div>
-          <div class="footer-col" style="font-size: 10px; line-height: 1.6;">
-            <div><span class="label">RCCM:</span> RC/DLA/2021/A/4514</div>
-            <div><span class="label">NIU:</span> P118717230679R</div>
-          </div>
-        </div>
-
+    <div class="sig-row">
+      <div class="sig-box">
+        <div class="sig-title">LA DIRECTION</div>
+        <div class="sig-stamp">ETS DACOSTA<br/>AUTOS<br/>YAOUNDÉ<br/>CAMEROUN</div>
       </div>
-    </body>
-    </html>
-  `;
+    </div>
+  </div>
 
-  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  <!-- FOOTER — dark like the original -->
+  <div class="footer">
+    <div class="footer-col">
+      <div class="footer-item">
+        <!-- Phone icon -->
+        <svg class="f-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/>
+        </svg>
+        <span>Tel: +237 673 99 79 50 / 658 98 84 87<br/>656 22 39 98</span>
+      </div>
+      <div class="footer-item">
+        <!-- Email icon -->
+        <svg class="f-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+          <polyline points="22,6 12,13 2,6"/>
+        </svg>
+        <span>geralddacosta2015@gmail.com</span>
+      </div>
+    </div>
+
+    <div class="footer-sep"></div>
+
+    <div class="footer-col">
+      <div class="footer-item">
+        <!-- Location icon -->
+        <svg class="f-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff5555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        <span>
+          Douala en face total Dobo BONABERI boutique N°836 Camp D<br/>
+          Yaoundé Mimboman liberté en face de beauty Magic
+        </span>
+      </div>
+    </div>
+
+    <div class="footer-sep"></div>
+
+    <div class="footer-col" style="font-size:10px;line-height:2;">
+      <div><span class="f-red">RCCM:</span> RC/DLA/2021/A/4514</div>
+      <div><span class="f-red">NIU:</span> P118717230679R</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const printWindow = window.open('', '_blank', 'width=900,height=750');
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
-    }, 600);
+    }, 800);
   }
 }
