@@ -16,9 +16,10 @@ async function bootstrap() {
     process.exit(1);
   }
 
+  // JWT_SECRET fallback for debugging only
   if (!process.env.JWT_SECRET) {
-    console.error('FATAL: JWT_SECRET environment variable is not set!');
-    process.exit(1);
+    console.warn('WARNING: JWT_SECRET not set, using fallback. SET THIS IN PRODUCTION!');
+    process.env.JWT_SECRET = 'fallback-secret-set-jwt-secret-in-railway-variables';
   }
 
   const app = await NestFactory.create(AppModule, {
