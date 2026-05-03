@@ -13,8 +13,8 @@ async function bootstrap() {
 
   // Temporary: use hardcoded DATABASE_URL if env var not set (REMOVE AFTER FIXING RAILWAY)
   if (!process.env.DATABASE_URL) {
-    console.warn('DATABASE_URL not in env, using hardcoded value for debugging');
-    process.env.DATABASE_URL = 'postgresql://postgres:zoLDBsGDhcxKJrLoNRqZLMnwzbYXsuzz@postgres.railway.internal:5432/dacosta_db';
+    console.warn('DATABASE_URL not in env, using hardcoded public URL');
+    process.env.DATABASE_URL = 'postgresql://postgres:zoLDBsGDhcxKJrLoNRqZLMnwzbYXsuzz@switchback.proxy.rlwy.net:45282/dacosta_db';
   }
 
   // JWT_SECRET fallback for debugging only
