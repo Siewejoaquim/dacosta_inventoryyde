@@ -72,26 +72,29 @@ export function printInvoice(data: PrintInvoiceOptions) {
           display: flex;
           align-items: center;
           gap: 10px;
+          min-width: 160px;
         }
         .logo-box {
-          border: 3px solid #cc0000;
-          padding: 6px 10px;
           text-align: center;
+          line-height: 1;
         }
-        .logo-box .dacosta {
-          font-size: 22px;
+        .logo-car svg {
+          display: block;
+          margin: 0 auto 2px auto;
+        }
+        .logo-dacosta {
+          font-size: 24px;
+          font-weight: 900;
+          color: #111;
+          letter-spacing: 1px;
+          font-family: Arial Black, Arial, sans-serif;
+        }
+        .logo-autos {
+          font-size: 15px;
           font-weight: 900;
           color: #cc0000;
-          letter-spacing: 1px;
-        }
-        .logo-box .autos {
-          font-size: 13px;
-          font-weight: 700;
-          color: #cc0000;
-        }
-        .car-icon {
-          font-size: 28px;
-          color: #cc0000;
+          letter-spacing: 2px;
+          font-family: Arial Black, Arial, sans-serif;
         }
         .company-info {
           text-align: center;
@@ -99,16 +102,17 @@ export function printInvoice(data: PrintInvoiceOptions) {
           padding: 0 20px;
         }
         .company-info h1 {
-          font-size: 32px;
+          font-size: 36px;
           font-weight: 900;
           color: #cc0000;
           letter-spacing: 2px;
+          font-family: Arial Black, Arial, sans-serif;
         }
         .company-info .brands {
           font-size: 13px;
           font-weight: 600;
           color: #333;
-          margin-top: 2px;
+          margin-top: 4px;
         }
 
         /* ── BODY ── */
