@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/client';
+import { useLang } from '../i18n/LanguageContext';
 
 type Period = 'monthly' | '6months' | 'yearly' | 'custom';
-
-const PERIOD_LABELS: Record<Period, string> = {
-  monthly: 'This Month',
-  '6months': 'Last 6 Months',
-  yearly: 'This Year',
-  custom: 'Custom Range',
-};
 
 export const ExpenseTrackingPage: React.FC = () => {
   const [period, setPeriod] = useState<Period>('monthly');
@@ -17,18 +11,26 @@ export const ExpenseTrackingPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [salesData, setSalesData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const { t, lang } = useLang();
 
-  const load = async (p: Period, f?: string, t?: string) => {
+  const PERIOD_LABELS: Record<Period, string> = {
+    monthly:  lang === 'fr' ? 'Ce mois'         : 'This Month',
+    '6months':lang === 'fr' ? '6 derniers mois' : 'Last 6 Months',
+    yearly:   lang === 'fr' ? 'Cette année'      : 'This Year',
+    custom:   lang === 'fr' ? 'Personnalisé'     : 'Custom Range',
+  };
+
+  const load = async (p: Period, f?: string, tDate?: string) => {
     setLoading(true);
     try {
       const params: any = { period: p };
-      if (p === 'custom' && f && t) { params.from = f; params.to = t; }
+      if (p === 'custom' && f && tDate) { params.from = f; params.to = tDate; }
 
       const [expRes, salesRes] = await Promise.all([
         api.get('/expenses/summary', { params }),
         api.get('/reports/custom', {
-          params: p === 'custom' && f && t
-            ? { from: f, to: t }
+          params: p === 'custom' && f && tDate
+            ? { from: f, to: tDate }
             : p === 'monthly'
             ? { from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], to: new Date().toISOString().split('T')[0] }
             : p === '6months'
@@ -50,21 +52,18 @@ export const ExpenseTrackingPage: React.FC = () => {
     if (p !== 'custom') load(p);
   };
 
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    load('custom', from, to);
-  };
-
-  const revenue = salesData?.totalRevenue ?? 0;
+  const revenue  = salesData?.totalSales ?? 0;
   const expenses = data?.total ?? 0;
-  const net = revenue - expenses;
+  const net      = revenue - expenses;
 
   return (
     <div>
       <div className="page-header">
         <div>
-          <h2 style={{ margin: 0 }}>Expense Tracking</h2>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Revenue vs expenses breakdown</div>
+          <h2 style={{ margin: 0 }}>{t('nav_expense_tracking')}</h2>
+          <div className="page-header-sub">
+            {lang === 'fr' ? 'Revenus vs dépenses' : 'Revenue vs expenses breakdown'}
+          </div>
         </div>
       </div>
 
@@ -81,51 +80,58 @@ export const ExpenseTrackingPage: React.FC = () => {
       </div>
 
       {period === 'custom' && (
-        <form onSubmit={handleCustomSubmit} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.2rem', flexWrap: 'wrap' }}>
+        <form onSubmit={(e) => { e.preventDefault(); load('custom', from, to); }}
+          style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.2rem', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>From</label>
+            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>{t('rep_from')}</label>
             <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required style={{ width: 'auto' }} />
           </div>
           <div>
-            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>To</label>
+            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>{t('rep_to')}</label>
             <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} required style={{ width: 'auto' }} />
           </div>
-          <button className="btn" type="submit" disabled={loading}>Apply</button>
+          <button className="btn" type="submit" disabled={loading}>{t('btn_apply')}</button>
         </form>
       )}
 
-      {loading ? <div>Loading...</div> : (
+      {loading ? (
+        <div style={{ color: '#6b7280' }}>{t('loading')}</div>
+      ) : (
         <>
-          {/* Summary cards */}
           <div className="card-grid" style={{ marginBottom: '1.2rem' }}>
-            <div className="card">
-              <div className="card-title">Revenue</div>
+            <div className="card accent-blue">
+              <div className="card-title">{lang === 'fr' ? 'Revenus' : 'Revenue'}</div>
               <div className="card-value" style={{ color: '#166534' }}>Fr {revenue.toLocaleString()}</div>
-              <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>{salesData?.numberOfInvoices ?? 0} invoices</div>
+              <div className="card-sub">{salesData?.invoiceCount ?? 0} {lang === 'fr' ? 'factures' : 'invoices'}</div>
             </div>
-            <div className="card">
-              <div className="card-title">Total Expenses</div>
+            <div className="card accent-red">
+              <div className="card-title">{lang === 'fr' ? 'Total dépenses' : 'Total Expenses'}</div>
               <div className="card-value" style={{ color: '#b91c1c' }}>Fr {expenses.toLocaleString()}</div>
-              <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>{data?.expenses?.length ?? 0} entries</div>
+              <div className="card-sub">{data?.expenses?.length ?? 0} {lang === 'fr' ? 'entrées' : 'entries'}</div>
             </div>
-            <div className="card">
-              <div className="card-title">Net Profit</div>
+            <div className="card accent-green">
+              <div className="card-title">{lang === 'fr' ? 'Bénéfice net' : 'Net Profit'}</div>
               <div className="card-value" style={{ color: net >= 0 ? '#166534' : '#b91c1c' }}>
                 Fr {net.toLocaleString()}
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-                {revenue > 0 ? `${((net / revenue) * 100).toFixed(1)}% margin` : '—'}
+              <div className="card-sub">
+                {revenue > 0 ? `${((net / revenue) * 100).toFixed(1)}% ${lang === 'fr' ? 'marge' : 'margin'}` : '—'}
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '1.2rem' }}>
-            {/* By category */}
+          <div className="page-grid-2">
             <div className="card">
-              <div className="card-title">Expenses by Category</div>
+              <div className="card-title">{lang === 'fr' ? 'Dépenses par catégorie' : 'Expenses by Category'}</div>
               {data?.byCategory && Object.keys(data.byCategory).length > 0 ? (
                 <table className="table">
-                  <thead><tr><th>Category</th><th>Total</th><th>%</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>{t('category')}</th>
+                      <th>{t('total')}</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {Object.entries(data.byCategory)
                       .sort(([, a], [, b]) => (b as number) - (a as number))
@@ -141,20 +147,29 @@ export const ExpenseTrackingPage: React.FC = () => {
                   </tbody>
                 </table>
               ) : (
-                <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>No expenses in this period.</div>
+                <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+                  {lang === 'fr' ? 'Aucune dépense sur cette période.' : 'No expenses in this period.'}
+                </div>
               )}
             </div>
 
-            {/* Expense list */}
             <div className="card">
-              <div className="card-title">All Expenses</div>
+              <div className="card-title">{lang === 'fr' ? 'Toutes les dépenses' : 'All Expenses'}</div>
               {data?.expenses?.length > 0 ? (
                 <div style={{ maxHeight: 380, overflowY: 'auto' }}>
                   <table className="table">
-                    <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>By</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>{t('date')}</th>
+                        <th>{t('category')}</th>
+                        <th>{t('description')}</th>
+                        <th>{t('amount')}</th>
+                        <th>{lang === 'fr' ? 'Par' : 'By'}</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {data.expenses.map((e: any) => (
-                        <tr key={e._id}>
+                        <tr key={e.id ?? e._id}>
                           <td style={{ fontSize: '0.78rem', color: '#6b7280' }}>{new Date(e.date).toLocaleDateString()}</td>
                           <td><span className="pill muted">{e.category}</span></td>
                           <td>{e.description}</td>
@@ -166,7 +181,9 @@ export const ExpenseTrackingPage: React.FC = () => {
                   </table>
                 </div>
               ) : (
-                <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>No expenses in this period.</div>
+                <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+                  {lang === 'fr' ? 'Aucune dépense sur cette période.' : 'No expenses in this period.'}
+                </div>
               )}
             </div>
           </div>

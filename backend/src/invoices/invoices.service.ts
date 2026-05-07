@@ -35,6 +35,7 @@ export class InvoicesService {
         quantity: item.quantity,
         unitPrice,
         totalPrice,
+        guarantee: item.guarantee ?? null,
       });
     }
 
@@ -58,6 +59,7 @@ export class InvoicesService {
         originalAmount,
         amountPaid,
         status: status as any,
+        guarantee: dto.guarantee ?? null,
         createdById: userId,
         items: { create: itemsData },
       },

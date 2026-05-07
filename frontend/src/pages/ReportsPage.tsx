@@ -1,25 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useLang } from '../i18n/LanguageContext';
 
-function downloadReportPDF(data: any, from: string, to: string) {
-  const rows = data.topProducts.map((p: any) => `
+const fmt = (n: number | undefined | null) =>
+  (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+function downloadReport(data: any, from: string, to: string, lang: string) {
+  const rows = (data.topProducts ?? []).map((p: any) => `
     <tr>
-      <td>${p.name}</td>
-      <td style="text-align:center">${p.quantity}</td>
-      <td style="text-align:right">Fr ${p.revenue.toLocaleString()}</td>
+      <td>${p.productName ?? p.name ?? '—'}</td>
+      <td style="text-align:center">${p._sum?.quantity ?? p.quantity ?? 0}</td>
+      <td style="text-align:right">Fr ${fmt(p._sum?.totalPrice ?? p.revenue ?? 0)}</td>
     </tr>`).join('');
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Sales Report ${from} to ${to}</title>
+  <title>DaCosta Report ${from} - ${to}</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 32px; color: #0f172a; }
     h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
     .sub { color: #6b7280; font-size: 0.85rem; margin-bottom: 2rem; }
-    .summary { display: flex; gap: 2rem; margin-bottom: 2rem; }
-    .stat { }
+    .summary { display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap; }
     .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
     .stat-value { font-size: 1.5rem; font-weight: 700; }
     table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -29,27 +32,37 @@ function downloadReportPDF(data: any, from: string, to: string) {
   </style>
 </head>
 <body>
-  <h1>DaCosta All Motors — Sales Report</h1>
-  <div class="sub">Period: ${from} to ${to}</div>
+  <h1>DaCosta All Motors — ${lang === 'fr' ? 'Rapport de ventes' : 'Sales Report'}</h1>
+  <div class="sub">${lang === 'fr' ? 'Période' : 'Period'}: ${from} → ${to}</div>
   <div class="summary">
     <div class="stat">
-      <div class="stat-label">Total Revenue</div>
-      <div class="stat-value">Fr ${data.totalRevenue.toLocaleString()}</div>
+      <div class="stat-label">${lang === 'fr' ? 'Revenus' : 'Revenue'}</div>
+      <div class="stat-value">Fr ${fmt(data.totalSales)}</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Invoices</div>
-      <div class="stat-value">${data.numberOfInvoices}</div>
+      <div class="stat-label">${lang === 'fr' ? 'Dépenses' : 'Expenses'}</div>
+      <div class="stat-value">Fr ${fmt(data.totalExpenses)}</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Products Sold</div>
-      <div class="stat-value">${data.totalProductsSold}</div>
+      <div class="stat-label">${lang === 'fr' ? 'Bénéfice net' : 'Net Profit'}</div>
+      <div class="stat-value">Fr ${fmt(data.netProfit)}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">${lang === 'fr' ? 'Factures' : 'Invoices'}</div>
+      <div class="stat-value">${data.invoiceCount ?? 0}</div>
     </div>
   </div>
+  ${rows ? `
+  <h2 style="font-size:1rem;margin-bottom:0.5rem;">${lang === 'fr' ? 'Top produits' : 'Top Products'}</h2>
   <table>
-    <thead><tr><th>Product</th><th style="text-align:center">Qty Sold</th><th style="text-align:right">Revenue</th></tr></thead>
+    <thead><tr>
+      <th>${lang === 'fr' ? 'Produit' : 'Product'}</th>
+      <th style="text-align:center">${lang === 'fr' ? 'Qté vendue' : 'Qty Sold'}</th>
+      <th style="text-align:right">${lang === 'fr' ? 'Revenus' : 'Revenue'}</th>
+    </tr></thead>
     <tbody>${rows}</tbody>
-  </table>
-  <div class="footer">Generated on ${new Date().toLocaleString()}</div>
+  </table>` : ''}
+  <div class="footer">${lang === 'fr' ? 'Généré le' : 'Generated on'} ${new Date().toLocaleString()}</div>
 </body>
 </html>`;
 
@@ -57,7 +70,7 @@ function downloadReportPDF(data: any, from: string, to: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `report-${from}-to-${to}.html`;
+  a.download = `dacosta-report-${from}-to-${to}.html`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -65,22 +78,24 @@ function downloadReportPDF(data: any, from: string, to: string) {
 }
 
 export const ReportsPage: React.FC = () => {
-  const [weekly, setWeekly] = useState<any | null>(null);
-  const [monthly, setMonthly] = useState<any | null>(null);
+  const [weekly, setWeekly]   = useState<any>(null);
+  const [monthly, setMonthly] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [toDate, setToDate]     = useState('');
   const [loadingCustom, setLoadingCustom] = useState(false);
+  const { t, lang } = useLang();
 
-  const load = async () => {
-    const [w, m] = await Promise.all([
-      api.get('/reports/weekly'),
-      api.get('/reports/monthly'),
-    ]);
-    setWeekly(w.data);
-    setMonthly(m.data);
-  };
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    Promise.all([
+      api.get('/reports/weekly').catch(() => ({ data: {} })),
+      api.get('/reports/monthly').catch(() => ({ data: {} })),
+    ]).then(([w, m]) => {
+      setWeekly(w.data ?? {});
+      setMonthly(m.data ?? {});
+      setLoading(false);
+    });
+  }, []);
 
   const handleCustomReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,112 +103,157 @@ export const ReportsPage: React.FC = () => {
     setLoadingCustom(true);
     try {
       const res = await api.get('/reports/custom', { params: { from: fromDate, to: toDate } });
-      downloadReportPDF(res.data, fromDate, toDate);
+      downloadReport(res.data, fromDate, toDate, lang);
     } catch (err: any) {
-      alert(err.response?.data?.message ?? 'Failed to generate report');
+      alert(err.response?.data?.message ?? t('error'));
     } finally {
       setLoadingCustom(false);
     }
   };
 
-  if (!weekly || !monthly) return <div>Loading reports...</div>;
+  if (loading) {
+    return (
+      <div>
+        <div className="page-header"><h2 style={{ margin: 0 }}>{t('rep_title')}</h2></div>
+        <div className="card-grid" style={{ marginBottom: '1.2rem' }}>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="card">
+              <div className="skeleton" style={{ height: 12, width: '50%', marginBottom: 10 }} />
+              <div className="skeleton" style={{ height: 32, width: '70%' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const weeklySales    = weekly?.totalSales ?? 0;
+  const weeklyCount    = weekly?.invoiceCount ?? 0;
+  const weeklyTop      = weekly?.topProducts ?? [];
+  const monthlySales   = monthly?.totalSales ?? 0;
+  const monthlyExpenses = monthly?.totalExpenses ?? 0;
+  const monthlyNet     = monthly?.netProfit ?? 0;
+  const monthlyCount   = monthly?.invoiceCount ?? 0;
+  const monthlyTop     = monthly?.topProducts ?? [];
+  const lowStock       = monthly?.lowStock ?? [];
 
   return (
     <div>
       <div className="page-header">
-        <h2 style={{ margin: 0 }}>Reports</h2>
+        <div>
+          <h2 style={{ margin: 0 }}>{t('rep_title')}</h2>
+          <div className="page-header-sub">{t('rep_subtitle')}</div>
+        </div>
       </div>
 
       <div className="card-grid" style={{ marginBottom: '1.2rem' }}>
-        <div className="card">
-          <div className="card-title">Weekly sales</div>
-          <div className="card-value">Fr {weekly.totalSales.toLocaleString()}</div>
-          <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{weekly.numberOfInvoices} invoices this week</div>
+        <div className="card accent-blue">
+          <div className="card-title">{t('rep_weekly')}</div>
+          <div className="card-value">Fr {fmt(weeklySales)}</div>
+          <div className="card-sub">{weeklyCount} {t('rep_invoices_week')}</div>
         </div>
-        <div className="card">
-          <div className="card-title">Monthly revenue</div>
-          <div className="card-value">Fr {monthly.totalMonthlyRevenue.toLocaleString()}</div>
-          <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{monthly.totalProductsSold} products sold</div>
+        <div className="card accent-blue">
+          <div className="card-title">{t('rep_monthly')}</div>
+          <div className="card-value">Fr {fmt(monthlySales)}</div>
+          <div className="card-sub">{monthlyCount} {t('rep_invoices_month')}</div>
         </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem', marginBottom: '1.2rem' }}>
-        <div className="card">
-          <div className="card-title">Weekly top products</div>
-          <table className="table">
-            <thead><tr><th>Product</th><th>Qty</th></tr></thead>
-            <tbody>
-              {weekly.topSellingProducts.map((p: any, i: number) => (
-                <tr key={i}><td>{p.name}</td><td>{p.quantity}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card">
-          <div className="card-title">Monthly best sellers</div>
-          <table className="table">
-            <thead><tr><th>Product</th><th>Qty</th></tr></thead>
-            <tbody>
-              {monthly.bestSellingProducts.map((p: any, i: number) => (
-                <tr key={i}><td>{p.name}</td><td>{p.quantity}</td></tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="card accent-green">
+          <div className="card-title">{t('rep_net_profit')}</div>
+          <div className="card-value" style={{ color: monthlyNet >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+            Fr {fmt(monthlyNet)}
+          </div>
+          <div className="card-sub">{t('dash_expenses_sub')} Fr {fmt(monthlyExpenses)}</div>
         </div>
       </div>
 
-      {/* Custom date range report */}
+      <div className="page-grid-2" style={{ marginBottom: '1.2rem' }}>
+        <div className="card">
+          <div className="card-title">{t('rep_weekly_top')}</div>
+          {weeklyTop.length === 0 ? (
+            <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>{t('rep_no_sales_week')}</div>
+          ) : (
+            <table className="table">
+              <thead><tr><th>{t('prod_name')}</th><th>{t('quantity')}</th><th>{t('rep_monthly')}</th></tr></thead>
+              <tbody>
+                {weeklyTop.map((p: any, i: number) => (
+                  <tr key={i}>
+                    <td>{p.productName ?? p.name ?? '—'}</td>
+                    <td>{p._sum?.quantity ?? p.quantity ?? 0}</td>
+                    <td>Fr {fmt(p._sum?.totalPrice ?? p.revenue ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="card">
+          <div className="card-title">{t('rep_monthly_top')}</div>
+          {monthlyTop.length === 0 ? (
+            <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>{t('rep_no_sales_month')}</div>
+          ) : (
+            <table className="table">
+              <thead><tr><th>{t('prod_name')}</th><th>{t('quantity')}</th><th>{t('amount')}</th></tr></thead>
+              <tbody>
+                {monthlyTop.map((p: any, i: number) => (
+                  <tr key={i}>
+                    <td>{p.productName ?? p.name ?? '—'}</td>
+                    <td>{p._sum?.quantity ?? p.quantity ?? 0}</td>
+                    <td>Fr {fmt(p._sum?.totalPrice ?? p.revenue ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: '1.2rem' }}>
-        <div className="card-title">Custom date range report</div>
-        <div style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-          Pick a date range and download a PDF report with revenue, invoice count, and top products.
-        </div>
+        <div className="card-title">{t('rep_custom')}</div>
+        <div style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: '0.75rem' }}>{t('rep_custom_hint')}</div>
         <form onSubmit={handleCustomReport} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 4 }}>From</label>
+          <div>
+            <label style={{ fontSize: '0.78rem', color: '#6b7280', display: 'block', marginBottom: 4 }}>{t('rep_from')}</label>
             <input className="input" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} required style={{ width: 'auto' }} />
           </div>
-          <div style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', marginBottom: 4 }}>To</label>
+          <div>
+            <label style={{ fontSize: '0.78rem', color: '#6b7280', display: 'block', marginBottom: 4 }}>{t('rep_to')}</label>
             <input className="input" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} required style={{ width: 'auto' }} />
           </div>
           <button className="btn" type="submit" disabled={loadingCustom}>
-            {loadingCustom ? 'Generating...' : '↓ Download Report'}
+            {loadingCustom ? t('rep_generating') : `↓ ${t('btn_download')}`}
           </button>
         </form>
       </div>
 
-      {/* Inventory status */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <div className="card-title" style={{ margin: 0 }}>Inventory status</div>
+        <div className="card-title">
+          {t('rep_low_stock')}
+          {lowStock.length > 0 && <span className="badge" style={{ marginLeft: 8 }}>{lowStock.length}</span>}
         </div>
-        <table className="table">
-          <thead>
-            <tr><th>Product</th><th>Category</th><th>In Stock</th><th>Reorder Point</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {monthly.inventoryStatus.map((p: any) => {
-              const reorder = p.reorderPoint ?? 5;
-              const low = p.quantityInStock < reorder;
-              return (
-                <tr key={p._id}>
+        {lowStock.length === 0 ? (
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>{t('dash_healthy_stock')}</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t('prod_name')}</th>
+                <th>{t('prod_in_stock')}</th>
+                <th>{t('prod_reorder')}</th>
+                <th>{t('status')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lowStock.map((p: any, i: number) => (
+                <tr key={i}>
                   <td>{p.productName}</td>
-                  <td>{p.category}</td>
-                  <td className={low ? 'low-stock' : ''}>{p.quantityInStock}</td>
-                  <td>{reorder}</td>
-                  <td>
-                    {low ? (
-                      <span className="badge">Low</span>
-                    ) : (
-                      <span className="pill success">OK</span>
-                    )}
-                  </td>
+                  <td className="low-stock">{p.quantityInStock}</td>
+                  <td>{p.reorderPoint ?? 5}</td>
+                  <td><span className="badge">{t('rep_low_stock')}</span></td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { RiUserLine, RiLockLine, RiArrowRightLine, RiErrorWarningLine } from 'react-icons/ri';
 import api from '../api/client';
+import { useLang } from '../i18n/LanguageContext';
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -10,6 +11,7 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation() as any;
+  const { lang, setLang, t } = useLang();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,12 +42,50 @@ export const LoginPage: React.FC = () => {
           </svg>
         </div>
 
-        <h1>Welcome back</h1>
-        <p>Sign in to manage inventory, invoices, and reports for DaCosta All Motors.</p>
+        {/* Language toggle on login page */}
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem' }}>
+          <button
+            onClick={() => setLang('fr')}
+            style={{
+              flex: 1,
+              padding: '0.3rem',
+              background: lang === 'fr' ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
+              color: lang === 'fr' ? 'white' : '#64748b',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '6px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            🇫🇷 Français
+          </button>
+          <button
+            onClick={() => setLang('en')}
+            style={{
+              flex: 1,
+              padding: '0.3rem',
+              background: lang === 'en' ? 'var(--accent)' : 'rgba(255,255,255,0.07)',
+              color: lang === 'en' ? 'white' : '#64748b',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '6px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            🇬🇧 English
+          </button>
+        </div>
+
+        <h1>{t('login_welcome')}</h1>
+        <p>{t('login_subtitle')}</p>
 
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Username</label>
+            <label>{t('login_username')}</label>
             <div style={{ position: 'relative' }}>
               <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#475569', display: 'flex' }}>
                 <RiUserLine size={16} />
@@ -56,13 +96,13 @@ export const LoginPage: React.FC = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
-                placeholder="Enter your username"
+                placeholder={t('login_placeholder_u')}
               />
             </div>
           </div>
 
           <div className="field">
-            <label>Password</label>
+            <label>{t('login_password')}</label>
             <div style={{ position: 'relative' }}>
               <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#475569', display: 'flex' }}>
                 <RiLockLine size={16} />
@@ -74,7 +114,7 @@ export const LoginPage: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder={t('login_placeholder_p')}
               />
             </div>
           </div>
@@ -91,8 +131,8 @@ export const LoginPage: React.FC = () => {
             style={{ width: '100%', marginTop: '1rem', padding: '0.7rem', fontSize: '0.9rem', borderRadius: '0.6rem', justifyContent: 'center' }}
             disabled={loading}
           >
-            {loading ? 'Signing in...' : (
-              <>Sign in <RiArrowRightLine size={16} /></>
+            {loading ? t('login_loading') : (
+              <>{t('login_btn')} <RiArrowRightLine size={16} /></>
             )}
           </button>
         </form>

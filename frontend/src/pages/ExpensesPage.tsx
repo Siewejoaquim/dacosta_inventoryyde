@@ -3,8 +3,7 @@ import { RiEditLine, RiCheckLine, RiCloseLine } from 'react-icons/ri';
 import api from '../api/client';
 import { decodeToken } from '../api/auth';
 import { useToast } from '../components/Toast';
-
-const CATEGORIES = ['Food', 'Transport', 'Supplies', 'Utilities', 'Other'];
+import { useLang } from '../i18n/LanguageContext';
 
 export const ExpensesPage: React.FC = () => {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -14,11 +13,17 @@ export const ExpensesPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ description: '', amount: '', category: 'Food' });
   const [editSaving, setEditSaving] = useState(false);
+  const { t, lang } = useLang();
 
   const user = decodeToken();
   const isAdmin = user?.role === 'ADMIN';
   const userId = user?.id;
   const toast = useToast();
+
+  // Categories translated
+  const CATEGORIES = lang === 'fr'
+    ? ['Nourriture', 'Transport', 'Fournitures', 'Services', 'Autre']
+    : ['Food', 'Transport', 'Supplies', 'Utilities', 'Other'];
 
   const load = () => {
     api.get('/expenses/today').then((r) => setExpenses(r.data));
@@ -35,11 +40,11 @@ export const ExpensesPage: React.FC = () => {
     setSaving(true);
     try {
       await api.post('/expenses', { ...form, amount: Number(form.amount) });
-      setForm({ description: '', amount: '', category: 'Food' });
-      toast.success('Expense logged successfully');
+      setForm({ description: '', amount: '', category: CATEGORIES[0] });
+      toast.success(lang === 'fr' ? 'Dépense enregistrée' : 'Expense logged successfully');
       load();
     } catch (err: any) {
-      const msg = err.response?.data?.message ?? 'Failed to log expense';
+      const msg = err.response?.data?.message ?? t('error');
       setError(msg);
       toast.error(msg);
     } finally {
@@ -48,23 +53,21 @@ export const ExpensesPage: React.FC = () => {
   };
 
   const startEdit = (e: any) => {
-    setEditingId(e._id);
+    setEditingId(e.id ?? e._id);
     setEditForm({ description: e.description, amount: String(e.amount), category: e.category });
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-  };
+  const cancelEdit = () => setEditingId(null);
 
   const handleEditSave = async (id: string) => {
     setEditSaving(true);
     try {
       await api.patch(`/expenses/${id}`, { ...editForm, amount: Number(editForm.amount) });
       setEditingId(null);
-      toast.success('Expense updated');
+      toast.success(lang === 'fr' ? 'Dépense mise à jour' : 'Expense updated');
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.message ?? 'Failed to update expense');
+      toast.error(err.response?.data?.message ?? t('error'));
     } finally {
       setEditSaving(false);
     }
@@ -72,7 +75,7 @@ export const ExpensesPage: React.FC = () => {
 
   const canEdit = (e: any) => {
     if (isAdmin) return true;
-    const loggedById = e.loggedBy?._id ?? e.loggedBy;
+    const loggedById = e.loggedBy?.id ?? e.loggedBy?._id ?? e.loggedBy;
     return loggedById === userId;
   };
 
@@ -80,54 +83,68 @@ export const ExpensesPage: React.FC = () => {
     <div>
       <div className="page-header">
         <div>
-          <h2 style={{ margin: 0 }}>Daily Expenses</h2>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Log today's shop expenses</div>
+          <h2 style={{ margin: 0 }}>{t('exp_title')}</h2>
+          <div className="page-header-sub">
+            {lang === 'fr' ? 'Saisir les dépenses du jour' : "Log today's shop expenses"}
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.2rem' }}>
+      <div className="page-grid-2">
         {/* Log form */}
         <div className="card">
-          <div className="card-title">Log an expense</div>
+          <div className="card-title">{t('exp_log')}</div>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>Category</label>
+            <div className="field">
+              <label>{t('category')}</label>
               <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>Description</label>
-              <input className="input" placeholder="e.g. Staff lunch, printer paper..." value={form.description}
+            <div className="field">
+              <label>{t('description')}</label>
+              <input className="input"
+                placeholder={lang === 'fr' ? 'ex. Déjeuner personnel, papier imprimante...' : 'e.g. Staff lunch, printer paper...'}
+                value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })} required />
             </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', color: '#6b7280', display: 'block', marginBottom: 3 }}>Amount (Fr)</label>
-              <input className="input" type="number" min={0} step="0.01" placeholder="0" value={form.amount}
+            <div className="field">
+              <label>{t('amount')} (Fr)</label>
+              <input className="input" type="number" min={0} step="0.01" placeholder="0"
+                value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
             </div>
             {error && <div style={{ color: '#b91c1c', fontSize: '0.82rem' }}>{error}</div>}
-            <button className="btn" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Log Expense'}</button>
+            <button className="btn" type="submit" disabled={saving}>
+              {saving ? t('saving') : t('exp_log')}
+            </button>
           </form>
         </div>
 
         {/* Today's list */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div className="card-title" style={{ margin: 0 }}>Today's expenses</div>
+            <div className="card-title" style={{ margin: 0 }}>{t('exp_today')}</div>
             <div style={{ fontWeight: 700, fontSize: '1rem' }}>Fr {total.toLocaleString()}</div>
           </div>
           {expenses.length === 0 ? (
-            <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>No expenses logged today.</div>
+            <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>{t('exp_no_expenses')}</div>
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Category</th><th>Description</th><th>Amount</th><th>By</th><th>Time</th><th></th></tr>
+                <tr>
+                  <th>{t('category')}</th>
+                  <th>{t('description')}</th>
+                  <th>{t('amount')}</th>
+                  <th>{lang === 'fr' ? 'Par' : 'By'}</th>
+                  <th>{lang === 'fr' ? 'Heure' : 'Time'}</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
                 {expenses.map((e: any) => (
-                  editingId === e._id ? (
-                    <tr key={e._id}>
+                  editingId === (e.id ?? e._id) ? (
+                    <tr key={e.id ?? e._id}>
                       <td>
                         <select className="select" value={editForm.category}
                           onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}>
@@ -149,7 +166,7 @@ export const ExpensesPage: React.FC = () => {
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
-                            onClick={() => handleEditSave(e._id)} disabled={editSaving}>
+                            onClick={() => handleEditSave(e.id ?? e._id)} disabled={editSaving}>
                             <RiCheckLine />
                           </button>
                           <button className="btn secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
@@ -160,7 +177,7 @@ export const ExpensesPage: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    <tr key={e._id}>
+                    <tr key={e.id ?? e._id}>
                       <td><span className="pill muted">{e.category}</span></td>
                       <td>{e.description}</td>
                       <td>Fr {e.amount.toLocaleString()}</td>
@@ -171,7 +188,7 @@ export const ExpensesPage: React.FC = () => {
                       <td>
                         {canEdit(e) && (
                           <button className="btn secondary" style={{ padding: '4px 8px', fontSize: '0.78rem' }}
-                            onClick={() => startEdit(e)} title="Edit">
+                            onClick={() => startEdit(e)} title={t('btn_edit')}>
                             <RiEditLine />
                           </button>
                         )}

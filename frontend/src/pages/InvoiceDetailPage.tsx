@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { RiDownloadLine, RiArrowLeftLine } from 'react-icons/ri';
 import api from '../api/client';
 import { decodeToken } from '../api/auth';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ConfirmModal';
-import { printInvoice } from '../utils/printInvoice';
+import { useLang } from '../i18n/LanguageContext';
+import { saveInvoicePDF } from '../utils/saveInvoicePDF';
 
 export const InvoiceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +19,7 @@ export const InvoiceDetailPage: React.FC = () => {
   const isAdmin = user?.role === 'ADMIN';
   const toast = useToast();
   const confirm = useConfirm();
+  const { t, lang } = useLang();
 
   const load = async () => {
     try {
@@ -49,9 +52,9 @@ export const InvoiceDetailPage: React.FC = () => {
 
   const handleVoid = async () => {
     const ok = await confirm({
-      title: 'Void this invoice?',
-      message: 'This will cancel the invoice and restore all stock quantities. This cannot be undone.',
-      confirmLabel: 'Void Invoice',
+      title: t('inv_void_confirm'),
+      message: t('inv_void_message'),
+      confirmLabel: t('btn_void'),
       danger: true,
     });
     if (!ok) return;
@@ -64,27 +67,46 @@ export const InvoiceDetailPage: React.FC = () => {
     }
   };
 
+  const [savingPDF, setSavingPDF] = useState(false);
+
+  const getInvoiceData = () => ({
+    invoiceNumber: invoice.invoiceNumber,
+    customerName: invoice.customerName,
+    customerPhone: invoice.customerPhone,
+    dateCreated: invoice.dateCreated,
+    items: (invoice.items ?? invoice.itemsPurchased ?? []).map((it: any) => ({
+      productName: it.productName,
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      totalPrice: it.totalPrice,
+      guarantee: it.guarantee ?? undefined,
+    })),
+    totalAmount: invoice.totalAmount,
+    originalAmount: invoice.originalAmount,
+    amountPaid: invoice.amountPaid,
+    status: invoice.status,
+    guarantee: invoice.guarantee ?? undefined,
+  });
+
   const handlePrint = async () => {
     if (!invoice) return;
-    await printInvoice({
-      invoiceNumber: invoice.invoiceNumber,
-      customerName: invoice.customerName,
-      customerPhone: invoice.customerPhone,
-      dateCreated: invoice.dateCreated,
-      items: (invoice.itemsPurchased || invoice.items || []).map((it: any) => ({
-        productName: it.productName,
-        quantity: it.quantity,
-        unitPrice: it.unitPrice,
-        totalPrice: it.totalPrice,
-      })),
-      totalAmount: invoice.totalAmount,
-      originalAmount: invoice.originalAmount,
-      amountPaid: invoice.amountPaid,
-      status: invoice.status,
-    });
+    await printInvoice(getInvoiceData());
   };
 
-  if (loading) return <div>Loading...</div>;
+  const handleSavePDF = async () => {
+    if (!invoice) return;
+    setSavingPDF(true);
+    try {
+      await saveInvoicePDF(getInvoiceData());
+      toast.success('PDF saved — check your downloads folder!');
+    } catch {
+      toast.error('Failed to generate PDF');
+    } finally {
+      setSavingPDF(false);
+    }
+  };
+
+  if (loading) return <div>{t('loading')}</div>;
   if (!invoice) return null;
 
   const balance = invoice.totalAmount - (invoice.amountPaid ?? 0);
@@ -106,30 +128,40 @@ export const InvoiceDetailPage: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="btn secondary" onClick={handlePrint}>Print</button>
+          <button
+            className="btn"
+            onClick={handleSavePDF}
+            disabled={savingPDF}
+            style={{ background: '#16a34a' }}
+          >
+            <RiDownloadLine size={15} />
+            {savingPDF ? t('saving') : t('btn_save_pdf')}
+          </button>
           {isAdmin && invoice.status !== 'VOID' && (
-            <button className="btn" style={{ background: '#b91c1c' }} onClick={handleVoid}>
-              Void Invoice
+            <button className="btn danger" onClick={handleVoid}>
+              {t('btn_void')}
             </button>
           )}
-          <button className="btn secondary" onClick={() => navigate('/invoices')}>← Back</button>
+          <button className="btn secondary" onClick={() => navigate('/invoices')}>
+            <RiArrowLeftLine size={14} /> {t('btn_back')}
+          </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.2rem' }}>
+      <div className="page-grid-2">
         <div className="card">
           <div className="card-title">Items</div>
           <table className="table">
             <thead>
-              <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+              <tr><th>{t('inv_product')}</th><th>{t('inv_qty')}</th><th>{t('inv_unit_price')}</th><th>{t('total')}</th></tr>
             </thead>
             <tbody>
-              {invoice.itemsPurchased.map((item: any, i: number) => (
+              {(invoice.items ?? invoice.itemsPurchased ?? []).map((item: any, i: number) => (
                 <tr key={i}>
                   <td>{item.productName}</td>
                   <td>{item.quantity}</td>
-                  <td>Fr {item.unitPrice.toLocaleString()}</td>
-                  <td>Fr {item.totalPrice.toLocaleString()}</td>
+                  <td>Fr {(item.unitPrice ?? 0).toLocaleString()}</td>
+                  <td>Fr {(item.totalPrice ?? 0).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -141,20 +173,26 @@ export const InvoiceDetailPage: React.FC = () => {
               </div>
             )}
             <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
-              {invoice.status === 'PARTIAL' ? 'Discounted Price' : 'Total'}: Fr {invoice.totalAmount.toLocaleString()}
+              {invoice.status === 'PARTIAL' ? 'Discounted Price' : 'Total'}: Fr {(invoice.totalAmount ?? 0).toLocaleString()}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="card">
-            <div className="card-title">Customer</div>
+            <div className="card-title">{t('inv_customer')}</div>
             <div style={{ fontWeight: 600 }}>{invoice.customerName}</div>
             {invoice.customerPhone && <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>{invoice.customerPhone}</div>}
+            {/* Guarantee */}
+            {invoice.guarantee && (
+              <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>
+                🛡️ {lang === 'fr' ? `Garantie : ${invoice.guarantee}` : `Guarantee: ${invoice.guarantee}`}
+              </div>
+            )}
           </div>
 
           <div className="card">
-            <div className="card-title">Payment</div>
+            <div className="card-title">{t('inv_payment')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
               <span style={{
                 padding: '0.2rem 0.7rem', borderRadius: 999, fontSize: '0.8rem', fontWeight: 600,
@@ -163,10 +201,10 @@ export const InvoiceDetailPage: React.FC = () => {
               }}>{invoice.status}</span>
             </div>
             <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.25rem' }}>
-              Amount Paid: Fr {(invoice.amountPaid ?? 0).toLocaleString()}
+              {t('inv_amount_paid')}: Fr {(invoice.amountPaid ?? 0).toLocaleString()}
             </div>
             <div style={{ fontSize: '0.85rem', color: balance > 0 ? '#b91c1c' : '#166534', fontWeight: 600 }}>
-              Balance: Fr {balance.toLocaleString()}
+              {t('inv_balance')}: Fr {balance.toLocaleString()}
             </div>
 
             {invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
@@ -179,10 +217,10 @@ export const InvoiceDetailPage: React.FC = () => {
                   step="0.01"
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(e.target.value)}
-                  placeholder="Amount paid"
+                  placeholder={t('inv_amount_paid')}
                 />
                 <button className="btn" type="submit" disabled={saving}>
-                  {saving ? '...' : 'Save'}
+                  {saving ? t('saving') : t('btn_save')}
                 </button>
               </form>
             )}
@@ -190,7 +228,7 @@ export const InvoiceDetailPage: React.FC = () => {
 
           {invoice.status === 'VOID' && (
             <div className="card" style={{ background: '#f9fafb' }}>
-              <div style={{ color: '#b91c1c', fontWeight: 600 }}>Voided</div>
+              <div style={{ color: '#b91c1c', fontWeight: 600 }}>{t('inv_voided')}</div>
               {invoice.voidedAt && (
                 <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                   {new Date(invoice.voidedAt).toLocaleString()}

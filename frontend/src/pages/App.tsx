@@ -9,6 +9,7 @@ import { ProductFormPage } from './ProductFormPage';
 import { InvoicesPage } from './InvoicesPage';
 import { InvoiceCreatePage } from './InvoiceCreatePage';
 import { InvoiceDetailPage } from './InvoiceDetailPage';
+import { InvoicePrintPage } from './InvoicePrintPage';
 import { ReportsPage } from './ReportsPage';
 import { UsersPage } from './UsersPage';
 import { StockHistoryPage } from './StockHistoryPage';
@@ -39,6 +40,11 @@ const wrap = (element: React.ReactNode, roles?: ('ADMIN' | 'STAFF')[]) => (
   </RequireAuth>
 );
 
+// Standalone page without sidebar layout
+const wrapStandalone = (element: React.ReactNode, roles?: ('ADMIN' | 'STAFF')[]) => (
+  <RequireAuth requiredRoles={roles}>{element}</RequireAuth>
+);
+
 export const App: React.FC = () => {
   return (
     <Routes>
@@ -50,6 +56,7 @@ export const App: React.FC = () => {
       <Route path="/invoices" element={wrap(<InvoicesPage />, ['ADMIN', 'STAFF'])} />
       <Route path="/invoices/new" element={wrap(<InvoiceCreatePage />, ['ADMIN', 'STAFF'])} />
       <Route path="/invoices/:id" element={wrap(<InvoiceDetailPage />, ['ADMIN', 'STAFF'])} />
+      <Route path="/invoices/:id/print" element={wrapStandalone(<InvoicePrintPage />, ['ADMIN', 'STAFF'])} />
       <Route path="/reports" element={wrap(<ReportsPage />, ['ADMIN', 'STAFF'])} />
       <Route path="/stock-history" element={wrap(<StockHistoryPage />, ['ADMIN'])} />
       <Route path="/users" element={wrap(<UsersPage />, ['ADMIN'])} />

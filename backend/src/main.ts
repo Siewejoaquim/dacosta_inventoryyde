@@ -6,6 +6,7 @@ import helmet from 'helmet';
 // Railway may use different variable names - check all of them
 const dbUrl =
   process.env.DATABASE_URL ||
+  process.env.DATABASE_PUBLIC_URL ||
   process.env.POSTGRES_URL ||
   process.env.POSTGRESQL_URL ||
   process.env.DATABASE_PRIVATE_URL ||
@@ -17,13 +18,9 @@ if (dbUrl && !process.env.DATABASE_URL) {
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('No database URL found in any env var!');
-  console.error('Checked: DATABASE_URL, POSTGRES_URL, POSTGRESQL_URL, DATABASE_PRIVATE_URL, POSTGRES_PRIVATE_URL');
-  console.error('All env var keys:', Object.keys(process.env).filter(k => 
-    k.toLowerCase().includes('postgres') || 
-    k.toLowerCase().includes('database') || 
-    k.toLowerCase().includes('db')
-  ));
+  console.error('❌ No database URL found!');
+  console.error('Please set DATABASE_URL in your .env file');
+  console.error('See LOCAL-SETUP-GUIDE.md for instructions');
   process.exit(1);
 }
 
@@ -37,7 +34,13 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     cors: {
-      origin: ['https://dacostaautos.netlify.app', 'http://localhost:5173'],
+      origin: [
+        'https://dacostaautos.netlify.app',
+        'http://localhost:5173',
+        /\.railway\.app$/, // Allow all Railway frontend deployments
+        /\.vercel\.app$/, // Allow Vercel deployments
+        /\.netlify\.app$/, // Allow Netlify deployments
+      ],
       credentials: true,
     },
   });

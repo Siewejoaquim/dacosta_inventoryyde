@@ -26,6 +26,12 @@ class InvoiceItemInput {
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  // Per-item guarantee — e.g. "1 semaine", "1 mois", "6 mois", "1 an"
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  guarantee?: string;
 }
 
 export class CreateInvoiceDto {
@@ -46,6 +52,12 @@ export class CreateInvoiceDto {
   @IsNumber()
   @Min(0)
   amountPaid?: number;
+
+  // Global guarantee for the whole invoice
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  guarantee?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

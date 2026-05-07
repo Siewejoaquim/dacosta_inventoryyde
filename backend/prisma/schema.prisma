@@ -79,6 +79,7 @@ model Invoice {
   originalAmount Float?
   amountPaid     Float         @default(0)
   status         InvoiceStatus @default(UNPAID)
+  guarantee      String?       // e.g. "1 semaine", "1 mois", "6 mois", "1 an"
   dateCreated    DateTime      @default(now())
   voidedAt       DateTime?
 
@@ -96,6 +97,7 @@ model InvoiceItem {
   quantity    Int
   unitPrice   Float
   totalPrice  Float
+  guarantee   String? // per-item guarantee override
 
   invoiceId String
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)

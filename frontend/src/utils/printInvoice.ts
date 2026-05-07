@@ -31,7 +31,47 @@ async function imageToBase64(url: string): Promise<string> {
       reader.readAsDataURL(blob);
     });
   } catch {
-    return ''; // fallback to no image
+    return '';
+  }
+}
+
+// Remove white/near-white background from logo using canvas
+async function logoWithTransparentBg(url: string): Promise<string> {
+  try {
+    const base64 = await imageToBase64(url);
+    if (!base64) return '';
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Make white and near-white pixels transparent
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          // If pixel is white or near-white (threshold 230)
+          if (r > 230 && g > 230 && b > 230) {
+            data[i + 3] = 0; // set alpha to 0 (transparent)
+          }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve('');
+      img.src = base64;
+    });
+  } catch {
+    return '';
   }
 }
 
@@ -45,8 +85,8 @@ export async function printInvoice(data: PrintInvoiceOptions) {
 
   const amountInWords = numberToFrenchWords(Math.round(data.totalAmount));
 
-  // Load logo as base64
-  const logoBase64 = await imageToBase64('/dacosta-logo.jpeg');
+  // Load logo with transparent background (removes white bg)
+  const logoBase64 = await logoWithTransparentBg('/dacosta-logo.jpeg');
 
   const itemRows = data.items.map((item, i) => `
     <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
@@ -71,6 +111,9 @@ export async function printInvoice(data: PrintInvoiceOptions) {
       font-family: Arial, Helvetica, sans-serif;
       background: #fff;
       color: #111;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
     }
     .page {
       width: 210mm;
@@ -95,6 +138,7 @@ export async function printInvoice(data: PrintInvoiceOptions) {
       width: 120px;
       height: auto;
       object-fit: contain;
+      background: transparent;
     }
     .header-divider {
       width: 2px;
@@ -205,35 +249,22 @@ export async function printInvoice(data: PrintInvoiceOptions) {
       font-size: 12px;
       font-weight: 700;
       text-decoration: underline;
-      margin-bottom: 38px;
-    }
-    .sig-stamp {
-      width: 88px;
-      height: 88px;
-      border: 2.5px solid #1a3a8f;
-      border-radius: 50%;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #1a3a8f;
-      font-size: 8.5px;
-      font-weight: 700;
-      text-align: center;
-      padding: 8px;
-      line-height: 1.5;
+      margin-bottom: 50px;
     }
 
     /* ── FOOTER ── */
     .footer {
-      background: #1a1a1a;
-      color: #fff;
+      background: #000000 !important;
+      color: #fff !important;
       padding: 10px 20px;
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 10px;
       border-top: 4px solid #cc0000;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
     }
     .footer-col { font-size: 10.5px; line-height: 1.75; }
     .footer-item {
@@ -248,6 +279,26 @@ export async function printInvoice(data: PrintInvoiceOptions) {
       width: 1px;
       background: rgba(255,255,255,0.12);
       align-self: stretch;
+    }
+
+    /* ── FORCE COLORS WHEN PRINTING ── */
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      .footer {
+        background: #000000 !important;
+        color: #fff !important;
+      }
+      .top-bar {
+        background: #cc0000 !important;
+      }
+      thead tr {
+        background: #1a1a1a !important;
+        color: #fff !important;
+      }
     }
   </style>
 </head>
@@ -320,7 +371,6 @@ export async function printInvoice(data: PrintInvoiceOptions) {
     <div class="sig-row">
       <div class="sig-box">
         <div class="sig-title">LA DIRECTION</div>
-        <div class="sig-stamp">ETS DACOSTA<br/>AUTOS<br/>YAOUNDÉ<br/>CAMEROUN</div>
       </div>
     </div>
   </div>

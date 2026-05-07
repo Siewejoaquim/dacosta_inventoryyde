@@ -55,10 +55,10 @@ export function useDashboardSummary() {
         totalSalesToday: todaysSales,
         expensesToday,
         netToday: todaysSales - expensesToday,
-        weeklySales: weekly.totalSales,
-        monthlyRevenue: monthly.totalMonthlyRevenue,
+        weeklySales: weekly.totalSales ?? 0,
+        monthlyRevenue: monthly.totalSales ?? 0,
         expensesMonthly,
-        netMonthly: monthly.totalMonthlyRevenue - expensesMonthly,
+        netMonthly: (monthly.totalSales ?? 0) - expensesMonthly,
         lowStock: products.filter((p) => p.quantityInStock < (p.reorderPoint ?? 5)),
         recentInvoices: invoices.slice(0, 5),
       };

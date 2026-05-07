@@ -1,398 +1,345 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { RiArrowLeftLine, RiAddLine, RiDeleteBinLine } from 'react-icons/ri';
 import api from '../api/client';
+import { useToast } from '../components/Toast';
+import { useLang } from '../i18n/LanguageContext';
+import { saveInvoicePDF } from '../utils/saveInvoicePDF';
+
+interface InvoiceItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  originalPrice: number;
+  guarantee: string; // per-item guarantee
+}
 
 export const InvoiceCreatePage: React.FC = () => {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { t, lang } = useLang();
+
   const [products, setProducts] = useState<any[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'UNPAID' | 'PARTIAL'>('UNPAID');
   const [amountPaid, setAmountPaid] = useState<number>(0);
-  const [items, setItems] = useState<
-    { productId: string; quantity: number; unitPrice: number }[]
-  >([]);
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [originalTotal, setOriginalTotal] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [guarantee, setGuarantee] = useState(''); // global guarantee
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api.get('/products').then((res) => {
       setProducts(res.data);
-      setItems([{ productId: res.data[0]?._id ?? '', quantity: 1, unitPrice: res.data[0]?.sellingPrice ?? 0 }]);
-    });
+      if (res.data.length > 0) {
+        setItems([{ productId: res.data[0].id, quantity: 1, unitPrice: res.data[0].sellingPrice ?? 0, originalPrice: res.data[0].sellingPrice ?? 0, guarantee: '' }]);
+      }
+    }).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    const calculatedTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    setOriginalTotal(calculatedTotal);
-    // For PARTIAL, total = amountPaid (discounted price). Otherwise, total = originalTotal
-    if (paymentStatus === 'PARTIAL') {
-      setTotal(amountPaid > 0 ? amountPaid : calculatedTotal);
-    } else {
-      setTotal(calculatedTotal);
-      if (paymentStatus === 'PAID') setAmountPaid(calculatedTotal);
-    }
-  }, [items, paymentStatus, amountPaid]);
+  const calculatedTotal = items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+  const originalTotal   = items.reduce((s, it) => s + it.quantity * it.originalPrice, 0);
+  const isDiscounted    = calculatedTotal < originalTotal;
+  const displayTotal    = paymentStatus === 'PARTIAL' ? amountPaid : calculatedTotal;
 
-  const handleItemChange = (
-    index: number,
-    field: 'productId' | 'quantity' | 'unitPrice',
-    value: string,
-  ) => {
+  const handleItemChange = (idx: number, field: keyof InvoiceItem, value: string) => {
     setItems((prev) => {
       const next = [...prev];
       if (field === 'productId') {
-        const selected = products.find((p) => p._id === value);
-        next[index].productId = value;
-        if (selected) {
-          next[index].unitPrice = selected.sellingPrice;
-        }
+        const p = products.find((p) => p.id === value);
+        next[idx] = { ...next[idx], productId: value, unitPrice: p?.sellingPrice ?? 0, originalPrice: p?.sellingPrice ?? 0 };
+      } else if (field === 'guarantee') {
+        next[idx].guarantee = value;
       } else {
-        (next[index] as any)[field] = Number(value);
+        (next[idx] as any)[field] = Number(value);
       }
       return next;
     });
   };
 
   const addRow = () => {
-    setItems((prev) => [...prev, { productId: products[0]?._id ?? '', quantity: 1, unitPrice: products[0]?.sellingPrice ?? 0 }]);
+    if (products.length === 0) return;
+    setItems((prev) => [...prev, { productId: products[0].id, quantity: 1, unitPrice: products[0].sellingPrice ?? 0, originalPrice: products[0].sellingPrice ?? 0, guarantee: '' }]);
+  };
+
+  const removeRow = (idx: number) => {
+    if (items.length > 1) setItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!customerName.trim()) e.customerName = t('inv_customer_name') + ' *';
+    if (paymentStatus === 'PARTIAL' && amountPaid <= 0) e.amountPaid = t('inv_amount_paid') + ' > 0';
+    if (paymentStatus === 'PARTIAL' && amountPaid >= calculatedTotal) e.amountPaid = t('pay_partial');
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // For PARTIAL: total = amountPaid (what they actually paid)
-    const finalTotal = paymentStatus === 'PARTIAL' ? amountPaid : total;
-    const payload = {
-      customerName,
-      customerPhone,
-      status: paymentStatus,
-      amountPaid: paymentStatus === 'PAID' ? finalTotal : (paymentStatus === 'PARTIAL' ? amountPaid : 0),
-      items: items.map((it) => ({
-        ...it,
-        productName: products.find((p) => p._id === it.productId)?.productName ?? '',
-      })),
-    };
+    if (!validate()) return;
+
+    const finalAmountPaid = paymentStatus === 'PAID' ? calculatedTotal : paymentStatus === 'PARTIAL' ? amountPaid : 0;
+
+    setLoading(true);
     try {
-      const response = await api.post('/invoices', payload);
-      
-      // Create a new window for printing
-      const printWindow = window.open('', '', 'width=800,height=600');
-      if (printWindow) {
-        const invoiceHTML = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Invoice - ${response.data.invoiceNumber}</title>
-              <style>
-                * {
-                  margin: 0;
-                  padding: 0;
-                  box-sizing: border-box;
-                }
-                body {
-                  font-family: Arial, sans-serif;
-                  padding: 20px;
-                  line-height: 1.6;
-                }
-                .container {
-                  max-width: 600px;
-                  margin: 0 auto;
-                }
-                .header {
-                  text-align: center;
-                  border-bottom: 2px solid #000;
-                  padding-bottom: 15px;
-                  margin-bottom: 20px;
-                }
-                .header h1 {
-                  font-size: 28px;
-                  font-weight: bold;
-                  margin: 0 0 5px 0;
-                }
-                .header p {
-                  font-size: 12px;
-                  color: #666;
-                  margin: 0;
-                }
-                .details {
-                  margin-bottom: 20px;
-                  font-size: 13px;
-                  line-height: 1.8;
-                }
-                .details p {
-                  margin: 5px 0;
-                }
-                .details strong {
-                  font-weight: bold;
-                }
-                table {
-                  width: 100%;
-                  border-collapse: collapse;
-                  margin-bottom: 20px;
-                  font-size: 13px;
-                }
-                table th {
-                  text-align: left;
-                  padding: 10px;
-                  font-weight: bold;
-                  border-bottom: 2px solid #000;
-                }
-                table td {
-                  padding: 10px;
-                  border-bottom: 1px solid #ddd;
-                }
-                table td.center {
-                  text-align: center;
-                }
-                table td.right {
-                  text-align: right;
-                }
-                .total-section {
-                  text-align: right;
-                  border-top: 2px solid #000;
-                  border-bottom: 2px solid #000;
-                  padding: 15px 0;
-                  margin-bottom: 20px;
-                }
-                .total-label {
-                  font-size: 14px;
-                  font-weight: bold;
-                  margin-bottom: 5px;
-                }
-                .total-amount {
-                  font-size: 20px;
-                  font-weight: bold;
-                }
-                .footer {
-                  text-align: center;
-                  font-size: 12px;
-                  color: #666;
-                  margin-top: 30px;
-                }
-                .footer p {
-                  margin: 5px 0;
-                }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>DACOSTA ALL MOTORS</h1>
-                  <p>INVOICE</p>
-                </div>
-                
-                <div class="details">
-                  <p><strong>Customer Name:</strong> ${customerName}</p>
-                  <p><strong>Customer Phone:</strong> ${customerPhone || 'N/A'}</p>
-                  <p><strong>Invoice Number:</strong> ${response.data.invoiceNumber}</p>
-                  <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-                </div>
-                
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Article</th>
-                      <th class="center" style="width: 60px;">Qty</th>
-                      <th class="right" style="width: 100px;">Unit Price</th>
-                      <th class="right" style="width: 100px;">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${items.map(item => {
-                      const product = products.find((p) => p._id === item.productId);
-                      const itemTotal = item.quantity * item.unitPrice;
-                      return `
-                        <tr>
-                          <td>${product?.productName || 'N/A'}</td>
-                          <td class="center">${item.quantity}</td>
-                          <td class="right">Fr ${item.unitPrice.toLocaleString()}</td>
-                          <td class="right"><strong>Fr ${itemTotal.toLocaleString()}</strong></td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
-                
-                <div class="total-section">
-                  <div class="total-label">TOTAL AMOUNT:</div>
-                  <div class="total-amount">Fr ${(paymentStatus === 'PARTIAL' ? amountPaid : total).toLocaleString()}</div>
-                  ${paymentStatus === 'PARTIAL' ? `
-                  <div style="margin-top:10px; font-size:13px; color:#555;">
-                    <div style="text-decoration:line-through; color:#999;">Original Price: Fr ${originalTotal.toLocaleString()}</div>
-                    <div style="color:#15803d; font-weight:bold; margin-top:4px;">Discounted Price: Fr ${amountPaid.toLocaleString()}</div>
-                  </div>` : ''}
-                  ${paymentStatus === 'PAID' ? `
-                  <div style="margin-top:8px; font-size:13px; color:#15803d; font-weight:bold;">PAID IN FULL</div>` : ''}
-                  ${paymentStatus === 'UNPAID' ? `
-                  <div style="margin-top:8px; font-size:13px; color:#b91c1c; font-weight:bold;">UNPAID — Balance Due: Fr ${total.toLocaleString()}</div>` : ''}
-                </div>
-                
-                <div class="footer">
-                  <p>Thank you for your business!</p>
-                  <p>Please retain this invoice for your records</p>
-                </div>
-              </div>
-            </body>
-          </html>
-        `;
-        printWindow.document.write(invoiceHTML);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      }
-    } catch (error) {
-      alert('Failed to create invoice');
+      const payload = {
+        customerName,
+        customerPhone: customerPhone || undefined,
+        status: paymentStatus,
+        amountPaid: finalAmountPaid,
+        guarantee: guarantee || undefined,
+        items: items.map((it) => ({
+          productId: it.productId,
+          productName: products.find((p) => p.id === it.productId)?.productName ?? '',
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          guarantee: it.guarantee || undefined,
+        })),
+      };
+
+      const res = await api.post('/invoices', payload);
+      toast.success(t('success'));
+
+      // Save as PDF directly — no print dialog
+      await saveInvoicePDF({
+        invoiceNumber: res.data.invoiceNumber,
+        customerName,
+        customerPhone,
+        dateCreated: res.data.dateCreated ?? new Date().toISOString(),
+        items: items.map((it) => ({
+          productName: products.find((p) => p.id === it.productId)?.productName ?? '',
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          totalPrice: it.quantity * it.unitPrice,
+          guarantee: it.guarantee || undefined,
+        })),
+        totalAmount: paymentStatus === 'PARTIAL' ? amountPaid : calculatedTotal,
+        originalAmount: isDiscounted ? originalTotal : undefined,
+        amountPaid: finalAmountPaid,
+        status: paymentStatus,
+        guarantee: guarantee || undefined,
+      });
+
+      toast.info(lang === 'fr' ? 'PDF enregistré — vérifiez vos téléchargements !' : 'PDF saved — check your downloads!');
+      navigate('/invoices');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? t('error'));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      {/* Screen View */}
-      <div style={{ display: 'print-item' }} className="screen-view">
-        <div className="page-header">
-          <h2 style={{ margin: 0 }}>Create invoice</h2>
+    <div style={{ maxWidth: 860, margin: '0 auto' }}>
+      <div className="page-header">
+        <div>
+          <button className="btn secondary" onClick={() => navigate('/invoices')} style={{ marginBottom: '0.5rem', fontSize: '0.82rem' }}>
+            <RiArrowLeftLine size={14} /> {t('btn_back')}
+          </button>
+          <h2 style={{ margin: 0 }}>{t('inv_create_title')}</h2>
+          <div className="page-header-sub">{t('inv_create_subtitle')}</div>
         </div>
-        <div className="card">
-          <form onSubmit={handleSubmit}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: '1rem',
-                marginBottom: '1rem',
-              }}
-            >
-              <div>
-                <label>Customer name</label>
-                <input
-                  className="input"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label>Customer phone</label>
-                <input
-                  className="input"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                />
-              </div>
-              <div>
-                <label>Payment status</label>
-                <select
-                  className="select"
-                  value={paymentStatus}
-                  onChange={(e) => {
-                    const val = e.target.value as 'PAID' | 'UNPAID' | 'PARTIAL';
-                    setPaymentStatus(val);
-                    if (val === 'PAID') setAmountPaid(total);
-                    if (val === 'UNPAID') setAmountPaid(0);
-                  }}
-                >
-                  <option value="UNPAID">Unpaid</option>
-                  <option value="PAID">Paid in full</option>
-                  <option value="PARTIAL">Partial payment</option>
-                </select>
-              </div>
-              {paymentStatus === 'PARTIAL' && (
-                <div>
-                  <label>Amount paid (Fr)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    min={0}
-                    max={total}
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(Number(e.target.value))}
-                    placeholder="0"
-                  />
-                </div>
-              )}
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        {/* Customer */}
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <div className="card-title" style={{ marginBottom: '1rem' }}>{t('inv_customer_details')}</div>
+          <div className="form-grid">
+            <div className="field">
+              <label>{t('inv_customer_name')} <span style={{ color: 'var(--danger)' }}>*</span></label>
+              <input className={`input ${errors.customerName ? 'error' : ''}`} value={customerName}
+                onChange={(e) => { setCustomerName(e.target.value); setErrors((p) => ({ ...p, customerName: '' })); }}
+                placeholder="e.g., Jean-Pierre Mbarga" maxLength={100} />
+              {errors.customerName && <div className="input-error">{errors.customerName}</div>}
             </div>
+            <div className="field">
+              <label>{t('inv_customer_phone')}</label>
+              <input className="input" value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="e.g., +237 6XX XXX XXX" maxLength={30} />
+            </div>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div className="card-title" style={{ margin: 0 }}>{t('inv_items')}</div>
+            <button type="button" className="btn secondary" onClick={addRow} style={{ fontSize: '0.82rem' }}>
+              <RiAddLine size={14} /> {t('inv_add_item')}
+            </button>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: '40%' }}>Product</th>
-                  <th style={{ width: '15%' }}>Qty</th>
-                  <th style={{ width: '20%' }}>Unit price</th>
-                  <th>Total</th>
+                  <th style={{ width: '32%' }}>{t('inv_product')}</th>
+                  <th style={{ width: '10%' }}>{t('inv_qty')}</th>
+                  <th style={{ width: '18%' }}>{t('inv_unit_price')} (Fr)</th>
+                  <th style={{ width: '15%' }}>{t('total')}</th>
+                  <th style={{ width: '20%' }}>{lang === 'fr' ? 'Garantie' : 'Guarantee'}</th>
+                  <th style={{ width: '5%' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td>
-                      <select
-                        className="select"
-                        value={item.productId}
-                        onChange={(e) =>
-                          handleItemChange(idx, 'productId', e.target.value)
-                        }
-                      >
-                        {products.map((p) => (
-                          <option key={p._id} value={p._id}>
-                            {p.productName}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="input"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          handleItemChange(idx, 'quantity', e.target.value)
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="input"
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          handleItemChange(idx, 'unitPrice', e.target.value)
-                        }
-                      />
-                    </td>
-                    <td>Fr {item.quantity * item.unitPrice}</td>
-                  </tr>
-                ))}
+                {items.map((item, idx) => {
+                  const isReduced = item.unitPrice < item.originalPrice;
+                  return (
+                    <tr key={idx} style={{ background: isReduced ? '#fef9c3' : undefined }}>
+                      <td>
+                        <select className="select" value={item.productId}
+                          onChange={(e) => handleItemChange(idx, 'productId', e.target.value)} required>
+                          {products.map((p) => <option key={p.id} value={p.id}>{p.productName}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" className="input" value={item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} min={1} required />
+                      </td>
+                      <td>
+                        <input type="number" className="input" value={item.unitPrice}
+                          onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)} min={0} required />
+                        {isReduced && (
+                          <div style={{ fontSize: '0.72rem', color: '#854d0e', marginTop: 2 }}>
+                            {t('inv_original')} Fr {item.originalPrice.toLocaleString()}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>Fr {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                      <td>
+                        {/* Per-item guarantee */}
+                        <select
+                          className="select"
+                          value={item.guarantee}
+                          onChange={(e) => handleItemChange(idx, 'guarantee', e.target.value)}
+                          style={{ fontSize: '0.82rem' }}
+                        >
+                          <option value="">{lang === 'fr' ? 'Aucune' : 'None'}</option>
+                          <option value="1 semaine">1 {lang === 'fr' ? 'semaine' : 'week'}</option>
+                          <option value="2 semaines">2 {lang === 'fr' ? 'semaines' : 'weeks'}</option>
+                          <option value="1 mois">1 {lang === 'fr' ? 'mois' : 'month'}</option>
+                          <option value="3 mois">3 {lang === 'fr' ? 'mois' : 'months'}</option>
+                          <option value="6 mois">6 {lang === 'fr' ? 'mois' : 'months'}</option>
+                          <option value="1 an">1 {lang === 'fr' ? 'an' : 'year'}</option>
+                          <option value="2 ans">2 {lang === 'fr' ? 'ans' : 'years'}</option>
+                        </select>
+                      </td>
+                      <td>
+                        {items.length > 1 && (
+                          <button type="button" onClick={() => removeRow(idx)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: 4, display: 'flex' }}>
+                            <RiDeleteBinLine size={15} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={addRow}
-              style={{ marginTop: '0.7rem' }}
-            >
-              + Add line
-            </button>
-            <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-              {paymentStatus === 'PARTIAL' && originalTotal !== amountPaid && (
-                <div style={{ fontSize: '0.85rem', color: '#999', textDecoration: 'line-through', marginBottom: 4 }}>
-                  Original: Fr {originalTotal.toLocaleString()}
+          </div>
+        </div>
+
+        {/* Payment */}
+        <div className="card" style={{ marginBottom: '1.25rem' }}>
+          <div className="card-title" style={{ marginBottom: '1rem' }}>{t('inv_payment')}</div>
+          <div className="form-grid">
+            <div className="field">
+              <label>{t('inv_payment_status')}</label>
+              <select className="select" value={paymentStatus}
+                onChange={(e) => {
+                  const v = e.target.value as 'PAID' | 'UNPAID' | 'PARTIAL';
+                  setPaymentStatus(v);
+                  if (v === 'PAID') setAmountPaid(calculatedTotal);
+                  if (v === 'UNPAID') setAmountPaid(0);
+                  setErrors((p) => ({ ...p, amountPaid: '' }));
+                }}>
+                <option value="UNPAID">{t('pay_unpaid')}</option>
+                <option value="PAID">{t('pay_paid')}</option>
+                <option value="PARTIAL">{t('pay_partial')}</option>
+              </select>
+            </div>
+            {paymentStatus === 'PARTIAL' && (
+              <div className="field">
+                <label>{t('inv_amount_paid')} (Fr) <span style={{ color: 'var(--danger)' }}>*</span></label>
+                <input type="number" className={`input ${errors.amountPaid ? 'error' : ''}`}
+                  value={amountPaid || ''}
+                  onChange={(e) => { setAmountPaid(Number(e.target.value)); setErrors((p) => ({ ...p, amountPaid: '' })); }}
+                  min={1} max={calculatedTotal - 1} />
+                {errors.amountPaid && <div className="input-error">{errors.amountPaid}</div>}
+                <div className="input-hint">{t('pay_full_hint')} Fr {calculatedTotal.toLocaleString()}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Global guarantee */}
+          <div className="field" style={{ marginTop: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              🛡️ {lang === 'fr' ? 'Garantie globale (optionnel)' : 'Global Guarantee (optional)'}
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {['', '1 semaine', '2 semaines', '1 mois', '3 mois', '6 mois', '1 an', '2 ans'].map((g) => {
+                const label = g === '' ? (lang === 'fr' ? 'Aucune' : 'None')
+                  : g.replace('semaine', lang === 'fr' ? 'semaine' : 'week')
+                     .replace('semaines', lang === 'fr' ? 'semaines' : 'weeks')
+                     .replace('mois', lang === 'fr' ? 'mois' : 'month(s)')
+                     .replace('an', lang === 'fr' ? 'an' : 'year')
+                     .replace('ans', lang === 'fr' ? 'ans' : 'years');
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGuarantee(g)}
+                    className="btn secondary"
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '0.3rem 0.85rem',
+                      background: guarantee === g ? '#0f172a' : undefined,
+                      color: guarantee === g ? 'white' : undefined,
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {guarantee && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#166534', fontWeight: 600 }}>
+                🛡️ {lang === 'fr' ? `Garantie : ${guarantee}` : `Guarantee: ${guarantee}`}
+              </div>
+            )}
+          </div>
+
+          {/* Total summary */}
+          <div className="inv-total-row" style={{ marginTop: '1rem', padding: '1rem 1.25rem', background: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8', textDecoration: 'line-through' }}>
+                  {t('inv_original')} Fr {originalTotal.toLocaleString()}
                 </div>
               )}
-              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                {paymentStatus === 'PARTIAL' ? 'Discounted price' : 'Total amount'}
-              </div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-                Fr {(paymentStatus === 'PARTIAL' ? amountPaid : total).toLocaleString()}
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {paymentStatus === 'PARTIAL' ? t('inv_discounted') : t('inv_total_amount')}
               </div>
             </div>
-            <div style={{ marginTop: '1rem', textAlign: 'right' }}>
-              <button className="btn" type="submit">
-                Save &amp; Print invoice
-              </button>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)' }}>
+              Fr {displayTotal.toLocaleString()}
             </div>
-          </form>
+          </div>
         </div>
-      </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button type="button" className="btn secondary" onClick={() => navigate('/invoices')} disabled={loading}>
+            {t('btn_cancel')}
+          </button>
+          <button type="submit" className="btn" disabled={loading} style={{ minWidth: 180 }}>
+            {loading ? t('saving') : t('btn_save_pdf')}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
-
