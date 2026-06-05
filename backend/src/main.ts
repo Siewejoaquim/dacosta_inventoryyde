@@ -37,8 +37,9 @@ async function bootstrap() {
       origin: [
         'https://dacostaautos.netlify.app',
         'http://localhost:5173',
+        'http://localhost:3000',
         /\.railway\.app$/, // Allow all Railway frontend deployments
-        /\.vercel\.app$/, // Allow Vercel deployments
+        /\.vercel\.app$/,  // Allow Vercel deployments
         /\.netlify\.app$/, // Allow Netlify deployments
       ],
       credentials: true,
